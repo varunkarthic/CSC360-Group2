@@ -3,11 +3,7 @@
 
 ## Group 2
 
-> A JavaFX desktop editor for creating, connecting, and managing graph nodes.
-
-This repository contains the Group 2 course project for CSC360. It brings together
-the project's requirements, interaction design, and software architecture in one
-place as the editor is developed.
+> A JavaFX desktop editor for creating and connecting graph nodes.
 
 ---
 
@@ -29,39 +25,46 @@ place as the editor is developed.
 | 3 | Garv | AU2520247 |
 | 4 | Shambhavee | AU2500016 |
 
-## About The Project
+## Running It
 
-The project is a JavaFX desktop editor for building small directed graphs visually.
-Users can place fixed-radius nodes on a drawing surface and create directed arrows
-between them through mouse interactions. The design focuses on predictable
-geometry, clear selection feedback, and reversible graph edits.
+Requires a JDK (21+) installed and on your `PATH`. The Gradle wrapper handles everything else — no local Gradle install needed.
 
-### Core Capabilities
+### macOS / Linux
 
-- Create solid, fixed-radius nodes with a secondary mouse click.
-- Prevent overlapping nodes through proximity checking.
-- Select an existing node for one-shot automatic connection when a new node is created.
-- Create directed arrows by dragging from one node to another.
-- Delete nodes or arrows with a primary click.
-- Remove all connected arrows automatically when a node is deleted.
-- Undo and redo graph changes using linked-list history stacks.
-- Keep rendering geometry and hit testing consistent so visible objects behave as expected.
-
-## Project Documentation
-
-The documentation is divided into two complementary views of the project:
-
-| Document | Description |
-| --- | --- |
-| [System Design](docs/design.md) | Defines the requirements, user interactions, mouse and keyboard behaviour, geometry rules, history semantics, and acceptance criteria. |
-| [System Architecture](docs/architecture.md) | Explains the proposed application structure, component responsibilities, data model, rendering approach, and implementation boundaries. |
-
-## Repository Structure
-
-```text
-CSC360-Group2-Project/
-├── README.md                 Project overview and team information
-└── docs/
-    ├── architecture.md      System structure and component design
-    └── design.md            Requirements and interaction specification
 ```
+git clone https://github.com/varunkarthic/CSC360-Group2.git
+cd CSC360-Group2
+./gradlew run
+```
+
+### Windows
+
+```
+git clone https://github.com/varunkarthic/CSC360-Group2.git
+cd CSC360-Group2
+gradlew.bat run
+```
+
+(Or double-click `gradlew.bat` from File Explorer inside the project folder.)
+
+## Features
+
+- Create fixed-radius nodes on the canvas.
+- Overlapping placement selects the existing node instead of creating a new one.
+- Select a node, then create another to auto-connect them with a directed arrow.
+- Drag between two existing nodes to connect them.
+- Click a node or arrow to delete it; deleting a node removes its arrows too.
+- Undo / redo every change.
+
+## Controls
+
+| Action | Control |
+| --- | --- |
+| Create a node | Right-click (or `Ctrl+click`) empty space |
+| Select / deselect a node | Right-click (or `Ctrl+click`) the node |
+| Auto-connect new node to selection | Select a node, then right-click empty space |
+| Connect two existing nodes | Left-click and drag from one node to another |
+| Delete a node or arrow | Left-click it (no drag) |
+| Undo | Undo button, or `Cmd+Z` / `Ctrl+Z` |
+| Redo | Redo button, or `Cmd+Shift+Z` / `Ctrl+Shift+Z` |
+| Cancel selection / drag | `Escape` |
