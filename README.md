@@ -35,9 +35,12 @@ This project is an interactive JavaFX graph editor developed for CSC360. Users c
 ### Key Features
 
 - **Fixed-Radius Node Placement:** Place solid nodes (radius 20 px) with centered coordinates.
-- **Proximity & Selection:** Right-clicking on an existing node toggles selection with a visible gold highlight.
+- **Proximity & Single-Selection:** Right-clicking on an existing node toggles selection with a visible gold highlight.
+- **Multi-Selection:** Shift + left-click on nodes toggles multi-selection with a distinct purple highlight ring.
 - **One-Shot Auto-Connect:** Select an existing node and right-click elsewhere on empty canvas to spawn a new node and automatically draw a directed arrow between them.
-- **Interactive Arrow Dragging:** Left-click and drag between two nodes with real-time rubber-band arrow preview.
+- **Interactive Arrow Dragging:** Left-click and drag between two nodes to connect them.
+- **Bidirectional Arrows:** Dragging between two nodes with an existing reverse arrow upgrades it into a double-headed bidirectional arrow.
+- **Drag-to-Move Nodes:** Drag a node (or a multi-selection of nodes) to empty canvas space to reposition smoothly with exact coordinate translations.
 - **Smart Boundary Clipping:** Arrows clip exactly to node perimeters using Euclidean unit vectors and render with filled directed arrowheads.
 - **Single-Click Deletion:** Stationary left-click deletes the targeted node (and all incident arrows) or arrow.
 - **Full Undo / Redo:** Every user action is encapsulated in a command and managed via two history stacks.
@@ -49,9 +52,12 @@ This project is an interactive JavaFX graph editor developed for CSC360. Users c
 | Action | Control |
 | --- | --- |
 | **Create a node** | Right-click (or `Ctrl+click`) on empty canvas |
-| **Select / deselect node** | Right-click (or `Ctrl+click`) an existing node |
+| **Select / deselect single node** | Right-click (or `Ctrl+click`) an existing node |
+| **Multi-select / deselect node** | `Shift` + Left-click on node |
 | **Auto-connect new node** | Select a node, then right-click on empty canvas |
 | **Connect two nodes** | Left-click and drag from source node to target node |
+| **Upgrade to bidirectional arrow** | Left-click and drag in reverse direction of existing arrow |
+| **Move node(s)** | Left-click and drag a node (or multi-selected nodes) to empty space |
 | **Delete a node or arrow** | Left-click on it (stationary click, no drag) |
 | **Undo** | **Undo** button or `Ctrl+Z` / `Cmd+Z` |
 | **Redo** | **Redo** button or `Ctrl+Y` / `Ctrl+Shift+Z` / `Cmd+Shift+Z` |
@@ -122,6 +128,8 @@ The application is structured into modular components adhering to object-oriente
      - `AddArrowCommand`: Inserts a directed arrow between two nodes.
      - `DeleteArrowCommand`: Removes an arrow and restores it on undo.
      - `AddConnectedNodeCommand`: Atomically creates a node and connects it to the selected node.
+     - `UpgradeArrowCommand`: Reversibly upgrades a directed arrow to bidirectional.
+     - `MoveNodesCommand`: Reversibly translates one or more nodes by (dx, dy).
 
 2. **Custom Data Structure (`LinkedStack<T>`):**
    - The undo and redo stacks are powered by a custom singly-linked list stack implementation (`push`, `pop`, `peek`, `size`, `isEmpty`), fulfilling project data structure requirements without using standard Java collection stacks.
@@ -156,11 +164,13 @@ CSC360-Group2/
     │   ├── EditCommand.java                    Command interface
     │   ├── EditorApplication.java              JavaFX GUI application and canvas controller
     │   ├── GeometryUtils.java                  Geometry and hit-testing helpers
-    │   ├── GraphArrow.java                     Directed arrow record/model
+    │   ├── GraphArrow.java                     Directed/bidirectional arrow record
     │   ├── GraphModel.java                     Graph state and entity manager
     │   ├── GraphNode.java                      Node model (id, position, radius)
     │   ├── LinkedStack.java                    Custom linked-list stack for history
-    │   └── Main.java                           JavaFX launcher class
+    │   ├── Main.java                           JavaFX launcher class
+    │   ├── MoveNodesCommand.java               Command to translate one or more nodes
+    │   └── UpgradeArrowCommand.java            Command to upgrade arrow to bidirectional
     └── test/java/com/example/grapheditor/
         └── EditorLogicTest.java                Unit tests for geometry, models, and stack
 ```

@@ -67,13 +67,17 @@ public class GraphModel {
         return result;
     }
 
-    public boolean arrowExists(long sourceId, long targetId) {
+    public GraphArrow findArrow(long sourceId, long targetId) {
         for (GraphArrow arrow : arrows.values()) {
             if (arrow.sourceId() == sourceId && arrow.targetId() == targetId) {
-                return true;
+                return arrow;
             }
         }
-        return false;
+        return null;
+    }
+
+    public boolean arrowExists(long sourceId, long targetId) {
+        return findArrow(sourceId, targetId) != null;
     }
 
     /**

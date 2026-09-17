@@ -16,7 +16,10 @@ import javafx.scene.layout.HBox;
 import javafx.scene.paint.Color;
 import javafx.stage.Stage;
 
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * JavaFX node/arrow graph editor.
@@ -46,12 +49,14 @@ public class EditorApplication extends Application {
     private static final Color SELECTION_COLOR = Color.web("#f59e0b");
     private static final Color CONNECTOR_COLOR = Color.web("#334155");
     private static final Color ARROWHEAD_COLOR = Color.web("#dc2626");
+    private static final Color MULTI_SELECT_COLOR = Color.web("#8b5cf6");
 
     private final GraphModel model = new GraphModel();
     private final LinkedStack<EditCommand> undoStack = new LinkedStack<>();
     private final LinkedStack<EditCommand> redoStack = new LinkedStack<>();
 
     private Long selectedNodeId;
+    private final Set<Long> multiSelectedNodeIds = new HashSet<>();
 
     // Primary-button gesture tracking (press -> drag? -> release classification).
     private boolean primaryGestureActive;
@@ -155,7 +160,7 @@ public class EditorApplication extends Application {
         if (dragged) {
             completeDrag(x, y);
         } else {
-            completeClick(x, y);
+            completeClick(x, y, event.isShiftDown());
         }
         pressHitNodeId = null;
     }
@@ -165,20 +170,60 @@ public class EditorApplication extends Application {
             return;
         }
         GraphNode target = model.hitNodeBody(releaseX, releaseY, NODE_RADIUS);
-        if (target == null || target.id() == pressHitNodeId) {
-            return;
+        if (target != null && target.id() != pressHitNodeId) {
+            // Drag to another node -> connect or upgrade to bidirectional
+            if (model.arrowExists(pressHitNodeId, target.id())) {
+                return;
+            }
+            GraphArrow reverse = model.findArrow(target.id(), pressHitNodeId);
+            if (reverse != null) {
+                if (!reverse.bidirectional()) {
+                    execute(new UpgradeArrowCommand(reverse));
+                }
+                return;
+            }
+            GraphArrow arrow = new GraphArrow(model.allocateArrowId(), pressHitNodeId, target.id());
+            execute(new AddArrowCommand(arrow));
+        } else if (target == null) {
+            // Drag to empty canvas -> move
+            double dx = releaseX - pressX;
+            double dy = releaseY - pressY;
+            if (Math.abs(dx) > GEOMETRY_EPSILON || Math.abs(dy) > GEOMETRY_EPSILON) {
+                List<GraphNode> nodesToMove = new ArrayList<>();
+                if (multiSelectedNodeIds.contains(pressHitNodeId)) {
+                    for (Long id : multiSelectedNodeIds) {
+                        GraphNode node = model.findNode(id);
+                        if (node != null) {
+                            nodesToMove.add(node);
+                        }
+                    }
+                } else {
+                    GraphNode pressedNode = model.findNode(pressHitNodeId);
+                    if (pressedNode != null) {
+                        nodesToMove.add(pressedNode);
+                    }
+                }
+                if (!nodesToMove.isEmpty()) {
+                    execute(new MoveNodesCommand(nodesToMove, dx, dy));
+                }
+            }
         }
-        if (model.arrowExists(pressHitNodeId, target.id())) {
-            return;
-        }
-        GraphArrow arrow = new GraphArrow(model.allocateArrowId(), pressHitNodeId, target.id());
-        execute(new AddArrowCommand(arrow));
     }
 
-    private void completeClick(double x, double y) {
+    private void completeClick(double x, double y, boolean isShiftDown) {
         GraphNode releaseNode = model.hitNodeBody(x, y, NODE_RADIUS);
         if (releaseNode != null) {
             if (pressHitNodeId != null && releaseNode.id() == pressHitNodeId) {
+                if (isShiftDown) {
+                    if (multiSelectedNodeIds.contains(releaseNode.id())) {
+                        multiSelectedNodeIds.remove(releaseNode.id());
+                    } else {
+                        multiSelectedNodeIds.add(releaseNode.id());
+                    }
+                    render();
+                    return;
+                }
+                multiSelectedNodeIds.remove(releaseNode.id());
                 List<GraphArrow> incident = model.incidentArrows(releaseNode.id());
                 execute(new DeleteNodeCommand(releaseNode, incident));
             }
@@ -224,6 +269,7 @@ public class EditorApplication extends Application {
 
     private void cancelInteraction() {
         selectedNodeId = null;
+        multiSelectedNodeIds.clear();
         primaryGestureActive = false;
         pressHitNodeId = null;
         render();
@@ -316,7 +362,13 @@ public class EditorApplication extends Application {
         gc.setLineWidth(2.0);
         gc.strokeOval(topLeftX, topLeftY, diameter, diameter);
 
-        if (selectedNodeId != null && selectedNodeId == node.id()) {
+        if (multiSelectedNodeIds.contains(node.id())) {
+            double ringInset = 4.0;
+            gc.setStroke(MULTI_SELECT_COLOR);
+            gc.setLineWidth(3.0);
+            gc.strokeOval(topLeftX + ringInset, topLeftY + ringInset,
+                    diameter - 2 * ringInset, diameter - 2 * ringInset);
+        } else if (selectedNodeId != null && selectedNodeId == node.id()) {
             double ringInset = 4.0;
             gc.setStroke(SELECTION_COLOR);
             gc.setLineWidth(3.0);
@@ -344,6 +396,9 @@ public class EditorApplication extends Application {
         gc.strokeLine(startX, startY, tipX, tipY);
 
         drawArrowhead(tipX, tipY, angle);
+        if (arrow.bidirectional()) {
+            drawArrowhead(startX, startY, angle + Math.PI);
+        }
     }
 
     private void drawArrowhead(double tipX, double tipY, double angle) {

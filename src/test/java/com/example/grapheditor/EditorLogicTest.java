@@ -118,4 +118,75 @@ public class EditorLogicTest {
         assertEquals(a, model.findNode(a.id()));
         assertTrue(model.arrowExists(a.id(), b.id()), "undo must restore the incident arrow");
     }
+
+    @Test
+    @DisplayName("Issue #11: Bidirectional arrow model, lookup, and UpgradeArrowCommand apply/undo")
+    void testBidirectionalArrowAndUpgradeCommand() {
+        GraphModel model = new GraphModel();
+        GraphNode a = new GraphNode(model.allocateNodeId(), 100, 100);
+        GraphNode b = new GraphNode(model.allocateNodeId(), 220, 100);
+        model.addNode(a);
+        model.addNode(b);
+
+        GraphArrow oneWay = new GraphArrow(model.allocateArrowId(), a.id(), b.id());
+        assertFalse(oneWay.bidirectional(), "default constructor must set bidirectional to false");
+        model.addArrow(oneWay);
+
+        assertEquals(oneWay, model.findArrow(a.id(), b.id()));
+        assertNull(model.findArrow(b.id(), a.id()));
+        assertTrue(model.arrowExists(a.id(), b.id()));
+        assertFalse(model.arrowExists(b.id(), a.id()));
+
+        UpgradeArrowCommand upgrade = new UpgradeArrowCommand(oneWay);
+        upgrade.apply(model);
+
+        GraphArrow upgraded = model.findArrow(a.id(), b.id());
+        assertNotNull(upgraded);
+        assertEquals(oneWay.id(), upgraded.id(), "upgraded arrow keeps the same id");
+        assertTrue(upgraded.bidirectional(), "upgraded arrow must have bidirectional = true");
+
+        upgrade.undo(model);
+        GraphArrow reverted = model.findArrow(a.id(), b.id());
+        assertNotNull(reverted);
+        assertEquals(oneWay.id(), reverted.id());
+        assertFalse(reverted.bidirectional(), "undo must restore original one-way arrow");
+    }
+
+    @Test
+    @DisplayName("Issue #16: GraphNode.withPosition and MoveNodesCommand apply/undo for single and multi-selection")
+    void testMoveNodesCommandRoundTrip() {
+        GraphModel model = new GraphModel();
+        GraphNode a = new GraphNode(model.allocateNodeId(), 100, 100);
+        GraphNode b = new GraphNode(model.allocateNodeId(), 200, 250);
+        model.addNode(a);
+        model.addNode(b);
+
+        // withPosition test
+        GraphNode aRepositioned = a.withPosition(150, 120);
+        assertEquals(a.id(), aRepositioned.id());
+        assertEquals(150.0, aRepositioned.x());
+        assertEquals(120.0, aRepositioned.y());
+
+        // Move single node
+        MoveNodesCommand moveSingle = new MoveNodesCommand(List.of(a), 50, -30);
+        moveSingle.apply(model);
+        GraphNode movedA = model.findNode(a.id());
+        assertEquals(150.0, movedA.x());
+        assertEquals(70.0, movedA.y());
+
+        moveSingle.undo(model);
+        assertEquals(a, model.findNode(a.id()));
+
+        // Move multiple nodes (multi-selection)
+        MoveNodesCommand moveMulti = new MoveNodesCommand(List.of(a, b), 40, 60);
+        moveMulti.apply(model);
+        assertEquals(140.0, model.findNode(a.id()).x());
+        assertEquals(160.0, model.findNode(a.id()).y());
+        assertEquals(240.0, model.findNode(b.id()).x());
+        assertEquals(310.0, model.findNode(b.id()).y());
+
+        moveMulti.undo(model);
+        assertEquals(a, model.findNode(a.id()));
+        assertEquals(b, model.findNode(b.id()));
+    }
 }
