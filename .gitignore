@@ -1,9 +1,12 @@
 # Java compiled files
 *.class
 
-# Maven build output
+# Maven and Gradle build output
 **/target/
+.gradle/
+**/build/
 
 # macOS
 .DS_Store
 **/.DS_Store
+
