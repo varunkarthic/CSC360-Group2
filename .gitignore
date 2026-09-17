@@ -6,6 +6,9 @@
 .gradle/
 **/build/
 
+# Local toolchain override: contains a machine-specific JDK path
+gradle.properties
+
 # macOS
 .DS_Store
 **/.DS_Store

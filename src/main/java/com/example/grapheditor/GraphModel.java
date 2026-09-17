@@ -25,6 +25,31 @@ public class GraphModel {
         return nextArrowId++;
     }
 
+    /**
+     * Replaces all graph state with the given nodes and arrows, as when opening a
+     * saved file, and restarts id allocation above the highest id present so that
+     * nodes created after a load cannot collide with loaded ones.
+     */
+    public void loadFrom(List<GraphNode> loadedNodes, List<GraphArrow> loadedArrows) {
+        nodes.clear();
+        arrows.clear();
+        for (GraphNode node : loadedNodes) {
+            nodes.put(node.id(), node);
+        }
+        for (GraphArrow arrow : loadedArrows) {
+            arrows.put(arrow.id(), arrow);
+        }
+
+        nextNodeId = 1;
+        for (GraphNode node : nodes.values()) {
+            nextNodeId = Math.max(nextNodeId, node.id() + 1);
+        }
+        nextArrowId = 1;
+        for (GraphArrow arrow : arrows.values()) {
+            nextArrowId = Math.max(nextArrowId, arrow.id() + 1);
+        }
+    }
+
     public void addNode(GraphNode node) {
         nodes.put(node.id(), node);
     }
@@ -90,6 +115,28 @@ public class GraphModel {
             }
         }
         return null;
+    }
+
+    /**
+     * The node nearest to (x, y) within {@code radius}, ignoring {@code excludedId},
+     * or null if none is in range. Used to pick the node a connect-drag tugs toward
+     * the cursor, where the drag's own source node must never be a candidate.
+     */
+    public GraphNode nearestNodeWithin(double x, double y, double radius, long excludedId) {
+        double limitSquared = radius * radius;
+        GraphNode nearest = null;
+        double nearestDistanceSquared = Double.MAX_VALUE;
+        for (GraphNode node : nodes.values()) {
+            if (node.id() == excludedId) {
+                continue;
+            }
+            double distanceSquared = GeometryUtils.distanceSquared(x, y, node.x(), node.y());
+            if (distanceSquared <= limitSquared && distanceSquared < nearestDistanceSquared) {
+                nearest = node;
+                nearestDistanceSquared = distanceSquared;
+            }
+        }
+        return nearest;
     }
 
     /**

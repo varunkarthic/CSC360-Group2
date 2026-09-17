@@ -1,10 +1,12 @@
 package com.example.grapheditor;
 
+import javafx.animation.AnimationTimer;
 import javafx.application.Application;
 import javafx.geometry.Insets;
 import javafx.scene.Scene;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
+import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
@@ -14,8 +16,13 @@ import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.paint.Color;
+import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
+import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -26,9 +33,11 @@ import java.util.Set;
  *
  * Right-click creates a node, or selects/deselects an existing one; creating a
  * node while another is selected connects them automatically. A primary-button
- * drag between two nodes creates a directed arrow. A stationary primary click
- * deletes the node or arrow under the pointer. Every edit is undoable/redoable
- * through two linked-list history stacks.
+ * drag between two nodes creates a directed arrow, with a dashed preview line
+ * following the cursor and the nearest candidate target easing toward it. A
+ * stationary primary click deletes the node or arrow under the pointer. Every
+ * edit is undoable/redoable through two linked-list history stacks, and a graph
+ * can be saved to and reloaded from a JSON file.
  */
 public class EditorApplication extends Application {
 
@@ -50,6 +59,13 @@ public class EditorApplication extends Application {
     private static final Color CONNECTOR_COLOR = Color.web("#334155");
     private static final Color ARROWHEAD_COLOR = Color.web("#dc2626");
     private static final Color MULTI_SELECT_COLOR = Color.web("#8b5cf6");
+    private static final Color PREVIEW_COLOR = Color.web("#94a3b8");
+
+    private static final double PREVIEW_DASH_LENGTH = 8.0;
+    private static final double PREVIEW_DASH_GAP = 6.0;
+
+    private static final String GRAPH_FILE_EXTENSION = "*.json";
+    private static final String DEFAULT_GRAPH_FILE_NAME = "graph.json";
 
     private final GraphModel model = new GraphModel();
     private final LinkedStack<EditCommand> undoStack = new LinkedStack<>();
@@ -65,10 +81,18 @@ public class EditorApplication extends Application {
     private Long pressHitNodeId;
     private double maxMovementSquared;
 
+    // Drag-connect feedback: last cursor position plus the cosmetic pull offsets.
+    private double dragCursorX;
+    private double dragCursorY;
+    private final PullMotionModel pullMotion = new PullMotionModel();
+    private AnimationTimer motionTimer;
+
+    private Stage mainStage;
     private GraphicsContext gc;
 
     @Override
     public void start(Stage primaryStage) {
+        mainStage = primaryStage;
         Canvas canvas = new Canvas(CANVAS_WIDTH, CANVAS_HEIGHT);
         gc = canvas.getGraphicsContext2D();
 
@@ -81,7 +105,11 @@ public class EditorApplication extends Application {
         undoButton.setOnAction(event -> undo());
         Button redoButton = new Button("Redo");
         redoButton.setOnAction(event -> redo());
-        HBox toolbar = new HBox(8, undoButton, redoButton);
+        Button saveButton = new Button("Save");
+        saveButton.setOnAction(event -> saveGraph());
+        Button loadButton = new Button("Load");
+        loadButton.setOnAction(event -> loadGraph());
+        HBox toolbar = new HBox(8, undoButton, redoButton, saveButton, loadButton);
         toolbar.setPadding(new Insets(8));
 
         BorderPane root = new BorderPane();
@@ -130,6 +158,10 @@ public class EditorApplication extends Application {
             primaryGestureActive = true;
             pressX = x;
             pressY = y;
+            // Seed the cursor at the press point so the first render of this gesture
+            // cannot preview a line toward a stale position from an earlier drag.
+            dragCursorX = x;
+            dragCursorY = y;
             GraphNode hit = model.hitNodeBody(x, y, NODE_RADIUS);
             pressHitNodeId = hit == null ? null : hit.id();
             maxMovementSquared = 0.0;
@@ -141,8 +173,21 @@ public class EditorApplication extends Application {
         if (!primaryGestureActive) {
             return;
         }
+        double x = event.getX();
+        double y = event.getY();
         maxMovementSquared = Math.max(maxMovementSquared,
-                GeometryUtils.distanceSquared(pressX, pressY, event.getX(), event.getY()));
+                GeometryUtils.distanceSquared(pressX, pressY, x, y));
+
+        if (pressHitNodeId == null) {
+            // Not a connect-drag, so there is no preview line or target to tug.
+            return;
+        }
+        dragCursorX = x;
+        dragCursorY = y;
+        GraphNode candidate = model.nearestNodeWithin(
+                x, y, PullMotionModel.PULL_RADIUS, pressHitNodeId);
+        pullMotion.setPulledNodeId(candidate == null ? null : candidate.id());
+        startMotionTimer();
     }
 
     private void handleMouseReleased(MouseEvent event) {
@@ -163,6 +208,8 @@ public class EditorApplication extends Application {
             completeClick(x, y, event.isShiftDown());
         }
         pressHitNodeId = null;
+        // Releasing the pull lets the offset ease back to zero on following frames.
+        pullMotion.setPulledNodeId(null);
     }
 
     private void completeDrag(double releaseX, double releaseY) {
@@ -272,7 +319,49 @@ public class EditorApplication extends Application {
         multiSelectedNodeIds.clear();
         primaryGestureActive = false;
         pressHitNodeId = null;
+        pullMotion.setPulledNodeId(null);
         render();
+    }
+
+    // -----------------------------------------------------------------
+    // Drag-pull animation driver
+    // -----------------------------------------------------------------
+
+    /**
+     * True while a primary drag that started on a node is in progress, which is
+     * exactly when the preview line and pull feedback are shown.
+     */
+    private boolean connectDragActive() {
+        return primaryGestureActive && pressHitNodeId != null;
+    }
+
+    private void startMotionTimer() {
+        if (motionTimer != null) {
+            return;
+        }
+        motionTimer = new AnimationTimer() {
+            @Override
+            public void handle(long now) {
+                onMotionFrame();
+            }
+        };
+        motionTimer.start();
+    }
+
+    private void stopMotionTimer() {
+        if (motionTimer == null) {
+            return;
+        }
+        motionTimer.stop();
+        motionTimer = null;
+    }
+
+    private void onMotionFrame() {
+        pullMotion.tick(model, dragCursorX, dragCursorY);
+        render();
+        if (pullMotion.isAtRest() && !connectDragActive()) {
+            stopMotionTimer();
+        }
     }
 
     // -----------------------------------------------------------------
@@ -309,6 +398,76 @@ public class EditorApplication extends Application {
     }
 
     // -----------------------------------------------------------------
+    // Persistence
+    // -----------------------------------------------------------------
+
+    private void saveGraph() {
+        File file = chooseGraphFile(true);
+        if (file == null) {
+            return;
+        }
+        try {
+            Files.writeString(file.toPath(), GraphJsonCodec.toJson(model), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            showError("Could not save graph", describe(e));
+        }
+    }
+
+    private void loadGraph() {
+        File file = chooseGraphFile(false);
+        if (file == null) {
+            return;
+        }
+
+        GraphModel loaded;
+        try {
+            loaded = GraphJsonCodec.fromJson(Files.readString(file.toPath(), StandardCharsets.UTF_8));
+        } catch (IOException e) {
+            showError("Could not read graph", describe(e));
+            return;
+        } catch (IllegalArgumentException e) {
+            showError("Not a valid graph file", describe(e));
+            return;
+        }
+
+        model.loadFrom(loaded.getNodes(), loaded.getArrows());
+        // A loaded graph has no meaningful history back to the previous in-memory graph.
+        undoStack.clear();
+        redoStack.clear();
+        selectedNodeId = null;
+        primaryGestureActive = false;
+        pressHitNodeId = null;
+        pullMotion.reset();
+        render();
+    }
+
+    private File chooseGraphFile(boolean forSaving) {
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle(forSaving ? "Save Graph" : "Open Graph");
+        chooser.getExtensionFilters().add(
+                new FileChooser.ExtensionFilter("Graph JSON", GRAPH_FILE_EXTENSION));
+        if (forSaving) {
+            chooser.setInitialFileName(DEFAULT_GRAPH_FILE_NAME);
+            return chooser.showSaveDialog(mainStage);
+        }
+        return chooser.showOpenDialog(mainStage);
+    }
+
+    private static String describe(Exception e) {
+        String message = e.getMessage();
+        return message == null || message.isBlank() ? e.getClass().getSimpleName() : message;
+    }
+
+    private void showError(String header, String detail) {
+        Alert alert = new Alert(Alert.AlertType.ERROR);
+        alert.initOwner(mainStage);
+        alert.setTitle("Graph Editor");
+        alert.setHeaderText(header);
+        alert.setContentText(detail);
+        alert.showAndWait();
+    }
+
+    // -----------------------------------------------------------------
     // Hit testing (shares geometry with rendering, see GeometryUtils)
     // -----------------------------------------------------------------
 
@@ -335,14 +494,46 @@ public class EditorApplication extends Application {
     // Rendering
     // -----------------------------------------------------------------
 
+    /**
+     * Draws from {@link PullMotionModel#effectivePosition} rather than raw model
+     * coordinates, so a node being tugged and the arrows attached to it move together.
+     * Hit testing deliberately stays on the real coordinates.
+     */
     private void render() {
         clearCanvas();
         for (GraphArrow arrow : model.getArrows()) {
             drawArrow(arrow);
         }
+        if (connectDragActive()) {
+            drawDragPreview();
+        }
         for (GraphNode node : model.getNodes()) {
             drawNode(node);
         }
+    }
+
+    private void drawDragPreview() {
+        GraphNode source = model.findNode(pressHitNodeId);
+        if (source == null) {
+            return;
+        }
+        double[] origin = pullMotion.effectivePosition(source);
+        if (GeometryUtils.distanceSquared(origin[0], origin[1], dragCursorX, dragCursorY)
+                <= NODE_RADIUS * NODE_RADIUS) {
+            // Cursor still inside the source node: nothing meaningful to preview yet.
+            return;
+        }
+
+        double angle = GeometryUtils.calculateAngle(origin[0], origin[1], dragCursorX, dragCursorY);
+        double startX = origin[0] + NODE_RADIUS * Math.cos(angle);
+        double startY = origin[1] + NODE_RADIUS * Math.sin(angle);
+
+        gc.setStroke(PREVIEW_COLOR);
+        gc.setLineWidth(2.0);
+        gc.setLineDashes(PREVIEW_DASH_LENGTH, PREVIEW_DASH_GAP);
+        gc.strokeLine(startX, startY, dragCursorX, dragCursorY);
+        // Restore solid strokes for the nodes and arrows drawn after this.
+        gc.setLineDashes();
     }
 
     private void clearCanvas() {
@@ -351,9 +542,10 @@ public class EditorApplication extends Application {
     }
 
     private void drawNode(GraphNode node) {
+        double[] center = pullMotion.effectivePosition(node);
         double diameter = NODE_RADIUS * 2;
-        double topLeftX = node.x() - NODE_RADIUS;
-        double topLeftY = node.y() - NODE_RADIUS;
+        double topLeftX = center[0] - NODE_RADIUS;
+        double topLeftY = center[1] - NODE_RADIUS;
 
         gc.setFill(NODE_FILL_COLOR);
         gc.fillOval(topLeftX, topLeftY, diameter, diameter);
@@ -384,7 +576,10 @@ public class EditorApplication extends Application {
             return;
         }
 
-        double[] segment = GeometryUtils.trimmedSegment(source.x(), source.y(), target.x(), target.y(), NODE_RADIUS);
+        double[] sourceCenter = pullMotion.effectivePosition(source);
+        double[] targetCenter = pullMotion.effectivePosition(target);
+        double[] segment = GeometryUtils.trimmedSegment(
+                sourceCenter[0], sourceCenter[1], targetCenter[0], targetCenter[1], NODE_RADIUS);
         double startX = segment[0];
         double startY = segment[1];
         double tipX = segment[2];

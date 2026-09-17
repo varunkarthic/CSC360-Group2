@@ -40,6 +40,30 @@ public final class GeometryUtils {
     }
 
     /**
+     * Linear interpolation from {@code a} to {@code b} by fraction {@code t}.
+     * Applied once per animation frame it yields exponential easing, which is how
+     * the drag-pull offsets both approach the cursor and spring back to rest.
+     */
+    public static double lerp(double a, double b, double t) {
+        return a + (b - a) * t;
+    }
+
+    /**
+     * The vector (dx, dy) shortened to {@code maxMagnitude} if it is longer than that,
+     * preserving direction. Zero-length input is returned unchanged.
+     *
+     * @return {dx, dy}
+     */
+    public static double[] clampMagnitude(double dx, double dy, double maxMagnitude) {
+        double lengthSquared = dx * dx + dy * dy;
+        if (lengthSquared <= maxMagnitude * maxMagnitude || lengthSquared < 1e-12) {
+            return new double[]{dx, dy};
+        }
+        double scale = maxMagnitude / Math.sqrt(lengthSquared);
+        return new double[]{dx * scale, dy * scale};
+    }
+
+    /**
      * Shortest distance from point P to the finite segment A-B.
      */
     public static double pointToSegmentDistance(double px, double py,
