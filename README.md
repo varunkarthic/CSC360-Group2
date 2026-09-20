@@ -74,60 +74,38 @@ This project is an interactive JavaFX graph editor developed for CSC360. Users c
 
 ### Prerequisites
 
-- **Java Development Kit (JDK):** Version 21 (LTS) is recommended and is what the build targets. Tested on JDK 21–24.
-- A terminal (PowerShell, Command Prompt, or Bash).
-
-> **Note on very new JDKs.** Gradle must itself run on a JDK it supports. On a newer JDK than the
-> bundled Gradle recognises (for example JDK 26), the build fails before compiling with
-> `Unsupported class file major version 70`. Point the build at a JDK 21 installation instead —
-> either by setting `JAVA_HOME`, or by creating a local `gradle.properties` (untracked, since the
-> path is machine-specific):
->
-> ```properties
-> org.gradle.java.home=/path/to/jdk-21
-> ```
+- **Java Development Kit (JDK):** Version 21 (LTS) is recommended and is what the build targets.
+- A terminal (PowerShell, Command Prompt, or Bash). No local Maven install is required — the included Maven Wrapper (`mvnw` / `mvnw.cmd`) downloads and pins the exact Maven version the build was tested with.
 
 ---
 
 ### Running the Application
 
-Both **Gradle** and **Maven** are supported.
-
-#### Option 1: Using Gradle (Recommended)
-
-The included Gradle wrapper handles all dependencies and tool installations automatically.
+- **macOS / Linux:**
+  ```bash
+  ./mvnw javafx:run
+  ```
 
 - **Windows (PowerShell or CMD):**
   ```powershell
-  .\gradlew.bat run
+  mvnw.cmd javafx:run
   ```
 
-- **macOS / Linux:**
-  ```bash
-  ./gradlew run
-  ```
-
-#### Option 2: Using Maven
-
-- **All Platforms:**
-  ```bash
-  mvn javafx:run
-  ```
+  (Or double-click `mvnw.cmd` from File Explorer inside the project folder.)
 
 ---
 
 ### Running Tests
 
-#### Using Gradle:
-```powershell
-.\gradlew.bat test
-```
-*(On macOS/Linux: `./gradlew test`)*
+- **macOS / Linux:**
+  ```bash
+  ./mvnw test
+  ```
 
-#### Using Maven:
-```powershell
-mvn test
-```
+- **Windows (PowerShell or CMD):**
+  ```powershell
+  mvnw.cmd test
+  ```
 
 ---
 
@@ -185,11 +163,9 @@ The application is structured into modular components adhering to object-oriente
 
 ```text
 CSC360-Group2/
-├── build.gradle                                Gradle build script
-├── settings.gradle                             Gradle settings
 ├── pom.xml                                     Maven build script
-├── gradlew / gradlew.bat                       Gradle wrapper scripts
-├── gradle/wrapper/                             Gradle wrapper distribution files
+├── mvnw / mvnw.cmd                             Maven wrapper scripts
+├── .mvn/wrapper/                               Maven wrapper distribution config
 ├── README.md                                   Project documentation
 └── src/
     ├── main/java/com/example/grapheditor/

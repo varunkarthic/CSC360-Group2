@@ -1,13 +1,12 @@
 # Java compiled files
 *.class
 
-# Maven and Gradle build output
+# Maven build output
 **/target/
+
+# Stray local/IDE build caches (not produced by this project's own build)
 .gradle/
 **/build/
-
-# Local toolchain override: contains a machine-specific JDK path
-gradle.properties
 
 # macOS
 .DS_Store
