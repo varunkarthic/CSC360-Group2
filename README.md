@@ -79,7 +79,8 @@ graph saves to a plain JSON file.
 | **Move node(s)** | Left-drag a node to empty space |
 | **Select several for auto-connect** | `Shift` + right-click nodes (orange rings); then right-click empty space to add one node linked from every selected node |
 | **Multi-select** | `Shift` + left-click nodes (purple ring); drag one to move all |
-| **Delete a node or arrow** | Left-click it without dragging |
+| **Label a node** | Double-click it, type text in the dialog (empty text removes the label) |
+| **Delete a node or arrow** | Left-click it without dragging (a node is deleted after a brief 0.3 s pause, so a double-click can label it instead) |
 | **Undo / Redo** | Buttons, or `Ctrl/Cmd+Z` and `Ctrl/Cmd+Shift+Z` |
 | **Save / Load** | **Save** / **Load** buttons (`.json`) |
 | **Cancel** | `Esc` |
@@ -103,7 +104,7 @@ Four small layers. The UI never edits the graph directly; it wraps every change 
 | Part | Role |
 |---|---|
 | **`EditorApplication`** | JavaFX window. Turns mouse gestures into commands and draws the canvas. |
-| **`EditCommand`** | Interface with `apply()` and `undo()`. Seven implementations cover every edit. |
+| **`EditCommand`** | Interface with `apply()` and `undo()`. Eight implementations cover every edit, including `RenameNodeCommand`. |
 | **`LinkedStack<T>`** | Hand-written linked-list stack holding undo and redo history. |
 | **`GraphModel`** | Nodes, arrows, ID allocation and hit-test queries. |
 | **`GeometryUtils`** | Angles, boundary clipping, point-to-segment distance, easing maths. |
@@ -116,15 +117,18 @@ Four small layers. The UI never edits the graph directly; it wraps every change 
 
 ```json
 {
-  "nodes":  [{"id": 1, "x": 120.0, "y": 80.0}],
+  "nodes":  [{"id": 1, "x": 120.0, "y": 80.0, "label": "Start"}],
   "arrows": [{"id": 1, "sourceId": 1, "targetId": 2, "bidirectional": false}]
 }
 ```
+
+`label` is optional (omitted when empty), so older files still load.
 
 ## Features in detail
 
 | Feature | What happens |
 |---|---|
+| **Node labels** | Double-click a node to give it a text label, drawn centred on the node (and following it while pulled). Labelling is one undo step, and labels are saved to JSON. |
 | **Fixed-size nodes** | Radius 20 px on an 800×600 canvas; a right-click too close to an existing node selects it instead of stacking a new one on top. |
 | **Selection** | Single select shows an orange ring, multi-select a purple ring. |
 | **Auto-connect** | Right-clicking empty space with one or more nodes selected (`Shift` + right-click adds more) creates the new node *and* an arrow from each selected node as one undo step, and the orange ring disappears as soon as the arrow is drawn. |
@@ -154,6 +158,7 @@ CSC360-Group2/
     │   ├── Add{Node,Arrow,ConnectedNode}Command.java
     │   ├── Delete{Node,Arrow}Command.java
     │   ├── UpgradeArrowCommand.java
+    │   ├── RenameNodeCommand.java
     │   ├── MoveNodesCommand.java
     │   ├── LinkedStack.java           Undo / redo stack
     │   ├── GraphModel.java            Graph state and queries

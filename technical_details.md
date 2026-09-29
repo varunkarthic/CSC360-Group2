@@ -252,7 +252,7 @@ public interface EditCommand {
 }
 ```
 
-### 7.2 The seven commands
+### 7.2 The eight commands
 
 | Command | State stored | `apply` | `undo` |
 |---|---|---|---|
@@ -263,6 +263,7 @@ public interface EditCommand {
 | `DeleteArrowCommand` | arrow | remove arrow | add arrow |
 | `UpgradeArrowCommand` | `before`, `after` (bidirectional copy, same id) | put `after` | put `before` |
 | `MoveNodesCommand` | original nodes, `dx`, `dy` | put copies moved by `(dx, dy)` | put originals back |
+| `RenameNodeCommand` | `before`, `after` (relabelled copy, same id and position) | put `after` | put `before` |
 
 Order matters where two objects are involved: an arrow is always added *after* its nodes and removed *before* them, so the model never holds an arrow pointing at a missing node.
 
@@ -389,7 +390,7 @@ Builds the text with a `StringBuilder`, one entry per line, in the model's inser
 
 ### 11.3 Reading (`fromJson`)
 
-A small hand-written recursive parser, `JsonScanner`, walks the text character by character. It supports exactly the subset this format needs: objects, arrays, plain string keys, numbers and `true`/`false`.
+A small hand-written recursive parser, `JsonScanner`, walks the text character by character. It supports exactly the subset this format needs: objects, arrays, strings (with the standard escapes `\"`, `\\`, `\/`, `\n`, `\r`, `\t`, `\b`, `\f`, `\uXXXX`), numbers and `true`/`false`. A node's optional `label` is the only string value; keys stay plain.
 
 **Validation rules**
 
@@ -405,8 +406,10 @@ A small hand-written recursive parser, `JsonScanner`, walks the text character b
 | Arrow whose `sourceId` / `targetId` is not a node in the file | Rejected |
 | `bidirectional` present but not a boolean | Rejected |
 | `bidirectional` absent | Accepted, defaults to `false` (older files still load) |
+| `label` present but not a string, or with an unknown/truncated escape | Rejected |
+| `label` absent | Accepted, defaults to empty (older files still load) |
 
-Parser limits: string escape sequences (`\n`, `\"`, `\uXXXX`) are not supported. This is fine because the schema only contains fixed ASCII keys.
+Labels are written only when non-empty, with quotes, backslashes and control characters escaped, so any label round-trips exactly.
 
 ### 11.4 Save and load in the UI
 
@@ -485,6 +488,8 @@ Worth knowing before a demo or a change:
 - **Arrows are one per direction.** A second arrow in an existing direction is silently ignored.
 - **Hit testing and drawing are O(n)** over nodes and arrows. This is fine for hand-drawn graphs, not for thousands of items.
 - **Fixed canvas.** 800 × 600, non-resizable, no zoom or pan. New nodes must sit at least one radius from the edge, but moves are not clamped, so a node can be dragged partly or fully off-canvas.
-- **JSON parser** does not support string escapes or comments (not needed by the schema).
-- **No labels, weights or colours** on nodes and arrows; the data model holds only ids, positions and direction.
+- **JSON parser** does not support comments (not needed by the schema).
+- **No weights or colours** on nodes and arrows; the data model holds ids, positions, direction and a node label.
+- **Labels are not clipped or wrapped.** A long label can overflow its 20 px circle.
+- **Deleting a node by click waits 0.3 s**, so a double-click (label) is not preempted by the delete the first click would trigger.
 - **UI-layer code** (`EditorApplication`) has no automated tests.
