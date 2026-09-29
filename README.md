@@ -102,6 +102,7 @@ Four small layers. The UI never edits the graph directly; it wraps every change 
 | **`LinkedStack<T>`** | Hand-written linked-list stack holding undo and redo history. |
 | **`GraphModel`** | Nodes, arrows, ID allocation and hit-test queries. |
 | **`GeometryUtils`** | Angles, boundary clipping, point-to-segment distance, easing maths. |
+| **`EditorHints`** | Chooses the short instruction line in the top bar for the current state. |
 | **`PullMotionModel`** | Cosmetic drag animation. Never touches the real graph. |
 | **`GraphJsonCodec`** | Writes and strictly parses the JSON format. |
 
@@ -119,8 +120,9 @@ Four small layers. The UI never edits the graph directly; it wraps every change 
 | Feature | What happens |
 |---|---|
 | **Fixed-size nodes** | Radius 20 px on an 800×600 canvas; a right-click too close to an existing node selects it instead of stacking a new one on top. |
-| **Selection** | Single select shows a gold ring, multi-select a purple ring. |
-| **Auto-connect** | Right-clicking empty space with a node selected creates the new node *and* its arrow as one undo step. |
+| **Selection** | Single select shows an orange ring, multi-select a purple ring. |
+| **Auto-connect** | Right-clicking empty space with a node selected creates the new node *and* its arrow as one undo step, and the orange ring disappears as soon as the arrow is drawn. |
+| **Context hints** | The top bar shows a one-line tip that changes with the state: idle, node selected, multi-selected, or dragging a connection. |
 | **Boundary clipping** | Arrows start and end on the circle edge (via `atan2`), not the centre, with filled arrowheads. |
 | **Precise hit testing** | Arrows are clicked by point-to-segment distance (6 px tolerance). |
 | **Drag-connect preview** | A dashed line follows the cursor and the nearest target eases toward it, then springs back. Purely visual; real coordinates are always used for hit tests. |
@@ -152,6 +154,7 @@ CSC360-Group2/
     │   ├── GraphNode.java             Node record
     │   ├── GraphArrow.java            Arrow record
     │   ├── GeometryUtils.java         Geometry helpers
+    │   ├── EditorHints.java           Top-bar hint text per state
     │   ├── PullMotionModel.java       Drag-pull animation state
     │   └── GraphJsonCodec.java        JSON save / load
     └── test/java/com/example/grapheditor/
