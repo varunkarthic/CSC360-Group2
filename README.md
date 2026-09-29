@@ -49,6 +49,10 @@ graph saves to a plain JSON file.
 ## Demo
 
 <p align="center">
+  <img src="media/editor_screenshot.png" alt="Graph Editor Interface Screenshot" width="100%">
+</p>
+
+<p align="center">
   <video src="https://github.com/varunkarthic/CSC360-Group2/raw/master/media/demo_video_1.mp4" controls muted width="100%"></video>
 </p>
 
