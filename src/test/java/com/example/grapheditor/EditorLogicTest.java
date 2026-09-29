@@ -555,12 +555,12 @@ public class EditorLogicTest {
     @Test
     @DisplayName("Hints: each editor state maps to its own short instruction, drag taking priority")
     void testHintSelection() {
-        assertEquals(EditorHints.IDLE, EditorHints.hintFor(false, false, 0));
-        assertEquals(EditorHints.NODE_SELECTED, EditorHints.hintFor(false, true, 0));
-        assertEquals(EditorHints.MULTI_SELECTED, EditorHints.hintFor(false, false, 2));
-        assertEquals(EditorHints.NODE_SELECTED, EditorHints.hintFor(false, true, 2),
+        assertEquals(EditorHints.IDLE, EditorHints.hintFor(false, 0, 0));
+        assertEquals(EditorHints.NODE_SELECTED, EditorHints.hintFor(false, 1, 0));
+        assertEquals(EditorHints.MULTI_SELECTED, EditorHints.hintFor(false, 0, 2));
+        assertEquals(EditorHints.NODE_SELECTED, EditorHints.hintFor(false, 1, 2),
                 "orange selection is the one right-click acts on");
-        assertEquals(EditorHints.CONNECTING, EditorHints.hintFor(true, true, 1));
+        assertEquals(EditorHints.CONNECTING, EditorHints.hintFor(true, 1, 1));
         for (String hint : new String[]{EditorHints.IDLE, EditorHints.NODE_SELECTED,
                 EditorHints.MULTI_SELECTED, EditorHints.CONNECTING}) {
             assertTrue(hint.length() <= 80, "hint must fit the toolbar: " + hint);
@@ -574,7 +574,7 @@ public class EditorLogicTest {
         GraphNode source = new GraphNode(model.allocateNodeId(), 100, 100);
         model.addNode(source);
         Long selected = source.id();
-        assertEquals(EditorHints.NODE_SELECTED, EditorHints.hintFor(false, selected != null, 0));
+        assertEquals(EditorHints.NODE_SELECTED, EditorHints.hintFor(false, selected != null ? 1 : 0, 0));
 
         GraphNode created = new GraphNode(model.allocateNodeId(), 250, 100);
         GraphArrow arrow = new GraphArrow(model.allocateArrowId(), source.id(), created.id());
@@ -582,11 +582,76 @@ public class EditorLogicTest {
         AddConnectedNodeCommand command = new AddConnectedNodeCommand(created, arrow);
         command.apply(model);
 
-        assertEquals(EditorHints.IDLE, EditorHints.hintFor(false, selected != null, 0));
+        assertEquals(EditorHints.IDLE, EditorHints.hintFor(false, selected != null ? 1 : 0, 0));
         assertEquals(2, model.getNodes().size());
         assertEquals(1, model.getArrows().size());
         command.undo(model);
         assertEquals(1, model.getNodes().size());
         assertTrue(model.getArrows().isEmpty());
+    }
+
+    @Test
+    @DisplayName("Multi-select: plain right-click replaces the selection, Shift+right-click toggles membership")
+    void testSelectionStateToggles() {
+        SelectionState selection = new SelectionState();
+        selection.toggleSingle(1);
+        assertEquals(List.of(1L), selection.ids());
+        selection.toggleSingle(2);
+        assertEquals(List.of(2L), selection.ids(), "plain click replaces");
+        selection.toggleAdditive(3);
+        selection.toggleAdditive(1);
+        assertEquals(List.of(2L, 3L, 1L), selection.ids(), "additive keeps order");
+        selection.toggleAdditive(3);
+        assertFalse(selection.contains(3));
+        assertEquals(2, selection.size());
+        selection.toggleSingle(2);
+        assertEquals(List.of(2L), selection.ids(), "plain click on one of several keeps only it");
+        selection.toggleSingle(2);
+        assertTrue(selection.isEmpty(), "plain click on the sole selection deselects");
+        selection.toggleAdditive(5);
+        selection.clear();
+        assertTrue(selection.isEmpty());
+    }
+
+    @Test
+    @DisplayName("Multi-select: a new node gets one arrow from every selected node, undone in one step")
+    void testMultiSourceAutoConnect() {
+        GraphModel model = new GraphModel();
+        SelectionState selection = new SelectionState();
+        long[] sourceIds = new long[3];
+        for (int i = 0; i < 3; i++) {
+            GraphNode n = new GraphNode(model.allocateNodeId(), 100 + 100 * i, 100);
+            model.addNode(n);
+            sourceIds[i] = n.id();
+            selection.toggleAdditive(n.id());
+        }
+        assertEquals(EditorHints.NODES_SELECTED, EditorHints.hintFor(false, selection.size(), 0));
+
+        GraphNode created = new GraphNode(model.allocateNodeId(), 300, 300);
+        List<GraphArrow> arrows = new java.util.ArrayList<>();
+        for (Long id : selection.ids()) {
+            arrows.add(new GraphArrow(model.allocateArrowId(), id, created.id()));
+        }
+        selection.clear();
+        AddConnectedNodeCommand command = new AddConnectedNodeCommand(created, arrows);
+        command.apply(model);
+
+        assertEquals(EditorHints.IDLE, EditorHints.hintFor(false, selection.size(), 0));
+        assertEquals(4, model.getNodes().size());
+        assertEquals(3, model.getArrows().size());
+        for (long source : sourceIds) {
+            assertTrue(model.arrowExists(source, created.id()), "arrow from " + source);
+        }
+        command.undo(model);
+        assertEquals(3, model.getNodes().size());
+        assertTrue(model.getArrows().isEmpty());
+    }
+
+    @Test
+    @DisplayName("Multi-select hint is short enough for the toolbar")
+    void testMultiSelectHintFits() {
+        assertTrue(EditorHints.NODES_SELECTED.length() <= 80);
+        assertEquals(EditorHints.NODES_SELECTED, EditorHints.hintFor(false, 2, 1));
+        assertEquals(EditorHints.CONNECTING, EditorHints.hintFor(true, 2, 0));
     }
 }

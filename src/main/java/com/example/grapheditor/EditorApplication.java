@@ -73,7 +73,8 @@ public class EditorApplication extends Application {
     private final LinkedStack<EditCommand> undoStack = new LinkedStack<>();
     private final LinkedStack<EditCommand> redoStack = new LinkedStack<>();
 
-    private Long selectedNodeId;
+    // Orange auto-connect selection: every member gets an arrow to the next node created.
+    private final SelectionState selection = new SelectionState();
     private final Set<Long> multiSelectedNodeIds = new HashSet<>();
 
     // Primary-button gesture tracking (press -> drag? -> release classification).
@@ -155,12 +156,12 @@ public class EditorApplication extends Application {
         boolean secondaryGesture = event.getButton() == MouseButton.SECONDARY
                 || (event.getButton() == MouseButton.PRIMARY && event.isControlDown());
         if (secondaryGesture) {
-            handleSecondaryClick(x, y);
+            handleSecondaryClick(x, y, event.isShiftDown());
             return;
         }
 
         if (event.getButton() == MouseButton.PRIMARY) {
-            selectedNodeId = null;
+            selection.clear();
             primaryGestureActive = true;
             pressX = x;
             pressY = y;
@@ -310,12 +311,16 @@ public class EditorApplication extends Application {
         }
     }
 
-    private void handleSecondaryClick(double x, double y) {
+    private void handleSecondaryClick(double x, double y, boolean additive) {
         GraphNode hit = model.hitNodeBody(x, y, NODE_RADIUS);
         GraphNode target = hit != null ? hit : model.nearestConflictingNode(x, y, NODE_RADIUS, GEOMETRY_EPSILON);
 
         if (target != null) {
-            selectedNodeId = (selectedNodeId != null && selectedNodeId == target.id()) ? null : target.id();
+            if (additive) {
+                selection.toggleAdditive(target.id());
+            } else {
+                selection.toggleSingle(target.id());
+            }
             render();
             return;
         }
@@ -326,19 +331,22 @@ public class EditorApplication extends Application {
         }
 
         GraphNode newNode = new GraphNode(model.allocateNodeId(), x, y);
-        if (selectedNodeId != null) {
-            GraphArrow arrow = new GraphArrow(model.allocateArrowId(), selectedNodeId, newNode.id());
+        if (!selection.isEmpty()) {
+            List<GraphArrow> arrows = new ArrayList<>();
+            for (Long sourceId : selection.ids()) {
+                arrows.add(new GraphArrow(model.allocateArrowId(), sourceId, newNode.id()));
+            }
             // Clear the selection before execute(), which renders: otherwise the orange
-            // ring lingers on the source until some later repaint.
-            selectedNodeId = null;
-            execute(new AddConnectedNodeCommand(newNode, arrow));
+            // rings linger on the sources until some later repaint.
+            selection.clear();
+            execute(new AddConnectedNodeCommand(newNode, arrows));
         } else {
             execute(new AddNodeCommand(newNode));
         }
     }
 
     private void cancelInteraction() {
-        selectedNodeId = null;
+        selection.clear();
         multiSelectedNodeIds.clear();
         primaryGestureActive = false;
         pressHitNodeId = null;
@@ -402,7 +410,7 @@ public class EditorApplication extends Application {
         if (undoStack.isEmpty()) {
             return;
         }
-        selectedNodeId = null;
+        selection.clear();
         EditCommand command = undoStack.pop();
         command.undo(model);
         redoStack.push(command);
@@ -413,7 +421,7 @@ public class EditorApplication extends Application {
         if (redoStack.isEmpty()) {
             return;
         }
-        selectedNodeId = null;
+        selection.clear();
         EditCommand command = redoStack.pop();
         command.apply(model);
         undoStack.push(command);
@@ -457,7 +465,7 @@ public class EditorApplication extends Application {
         // A loaded graph has no meaningful history back to the previous in-memory graph.
         undoStack.clear();
         redoStack.clear();
-        selectedNodeId = null;
+        selection.clear();
         primaryGestureActive = false;
         pressHitNodeId = null;
         pullMotion.reset();
@@ -525,7 +533,7 @@ public class EditorApplication extends Application {
     private void render() {
         if (hintLabel != null) {
             hintLabel.setText(EditorHints.hintFor(
-                    connectDragActive(), selectedNodeId != null, multiSelectedNodeIds.size()));
+                    connectDragActive(), selection.size(), multiSelectedNodeIds.size()));
         }
         clearCanvas();
         for (GraphArrow arrow : model.getArrows()) {
@@ -587,7 +595,7 @@ public class EditorApplication extends Application {
             gc.setLineWidth(3.0);
             gc.strokeOval(topLeftX + ringInset, topLeftY + ringInset,
                     diameter - 2 * ringInset, diameter - 2 * ringInset);
-        } else if (selectedNodeId != null && selectedNodeId == node.id()) {
+        } else if (selection.contains(node.id())) {
             double ringInset = 4.0;
             gc.setStroke(SELECTION_COLOR);
             gc.setLineWidth(3.0);

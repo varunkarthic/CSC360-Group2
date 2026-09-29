@@ -10,6 +10,8 @@ public final class EditorHints {
             "Right-click: add node | Drag node to node: connect | Drag: move | Click: delete";
     public static final String NODE_SELECTED =
             "Node selected: right-click empty space to add a linked node | Esc: cancel";
+    public static final String NODES_SELECTED =
+            "Nodes selected: right-click empty space to link all to a new node | Esc: cancel";
     public static final String MULTI_SELECTED =
             "Multi-selected: drag to move together | Shift+click: add/remove | Esc: clear";
     public static final String CONNECTING =
@@ -20,14 +22,17 @@ public final class EditorHints {
 
     /**
      * @param connectDragActive a left-drag that started on a node is in progress
-     * @param nodeSelected      a single (orange) node is selected
+     * @param selectedCount     how many nodes are selected (orange); Shift+right-click adds more
      * @param multiSelectedCount how many nodes are multi-selected (purple)
      */
-    public static String hintFor(boolean connectDragActive, boolean nodeSelected, int multiSelectedCount) {
+    public static String hintFor(boolean connectDragActive, int selectedCount, int multiSelectedCount) {
         if (connectDragActive) {
             return CONNECTING;
         }
-        if (nodeSelected) {
+        if (selectedCount > 1) {
+            return NODES_SELECTED;
+        }
+        if (selectedCount == 1) {
             return NODE_SELECTED;
         }
         if (multiSelectedCount > 0) {
