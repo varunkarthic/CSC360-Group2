@@ -322,8 +322,10 @@ public class EditorApplication extends Application {
         GraphNode newNode = new GraphNode(model.allocateNodeId(), x, y);
         if (selectedNodeId != null) {
             GraphArrow arrow = new GraphArrow(model.allocateArrowId(), selectedNodeId, newNode.id());
-            execute(new AddConnectedNodeCommand(newNode, arrow));
+            // Clear the selection before execute(), which renders: otherwise the orange
+            // ring lingers on the source until some later repaint.
             selectedNodeId = null;
+            execute(new AddConnectedNodeCommand(newNode, arrow));
         } else {
             execute(new AddNodeCommand(newNode));
         }
