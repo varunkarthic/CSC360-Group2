@@ -7,7 +7,7 @@ package com.example.grapheditor;
 public final class EditorHints {
 
     public static final String IDLE =
-            "Right-click: add node | Drag node to node: connect | Drag: move | Click: delete";
+            "Right-click: add | Drag: connect or move | Double-click: label | Click: delete";
     public static final String NODE_SELECTED =
             "Node selected: right-click empty space to add a linked node | Esc: cancel";
     public static final String NODES_SELECTED =

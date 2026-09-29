@@ -1,15 +1,18 @@
 package com.example.grapheditor;
 
 import javafx.animation.AnimationTimer;
+import javafx.animation.PauseTransition;
 import javafx.application.Application;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.geometry.VPos;
 import javafx.scene.Scene;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.control.TextInputDialog;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
 import javafx.scene.input.KeyCombination;
@@ -18,8 +21,11 @@ import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.paint.Color;
+import javafx.scene.text.Font;
+import javafx.scene.text.TextAlignment;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
+import javafx.util.Duration;
 
 import java.io.File;
 import java.io.IOException;
@@ -63,6 +69,12 @@ public class EditorApplication extends Application {
     private static final Color MULTI_SELECT_COLOR = Color.web("#8b5cf6");
     private static final Color PREVIEW_COLOR = Color.web("#94a3b8");
 
+    private static final Color LABEL_COLOR = Color.WHITE;
+    private static final Font LABEL_FONT = Font.font(11.0);
+    // A stationary click on a node deletes it, but only once this long has passed
+    // without a second click, since a double-click renames the node instead.
+    private static final double DOUBLE_CLICK_DELAY_MS = 300.0;
+
     private static final double PREVIEW_DASH_LENGTH = 8.0;
     private static final double PREVIEW_DASH_GAP = 6.0;
 
@@ -89,6 +101,8 @@ public class EditorApplication extends Application {
     private double dragCursorY;
     private final PullMotionModel pullMotion = new PullMotionModel();
     private AnimationTimer motionTimer;
+
+    private PauseTransition pendingDelete;
 
     private Stage mainStage;
     private GraphicsContext gc;
@@ -158,6 +172,17 @@ public class EditorApplication extends Application {
         if (secondaryGesture) {
             handleSecondaryClick(x, y, event.isShiftDown());
             return;
+        }
+
+        if (event.getButton() == MouseButton.PRIMARY && event.getClickCount() == 2) {
+            GraphNode labelTarget = model.hitNodeBody(x, y, NODE_RADIUS);
+            if (labelTarget != null) {
+                // Second click of a double-click: rename instead of the delete the
+                // first click had scheduled, and skip the normal press/drag gesture.
+                cancelPendingDelete();
+                editLabel(labelTarget);
+                return;
+            }
         }
 
         if (event.getButton() == MouseButton.PRIMARY) {
@@ -292,9 +317,7 @@ public class EditorApplication extends Application {
                     render();
                     return;
                 }
-                multiSelectedNodeIds.remove(releaseNode.id());
-                List<GraphArrow> incident = model.incidentArrows(releaseNode.id());
-                execute(new DeleteNodeCommand(releaseNode, incident));
+                scheduleNodeDelete(releaseNode.id());
             }
             return;
         }
@@ -309,6 +332,41 @@ public class EditorApplication extends Application {
         if (releaseArrow != null && pressArrow != null && releaseArrow.id() == pressArrow.id()) {
             execute(new DeleteArrowCommand(releaseArrow));
         }
+    }
+
+    private void scheduleNodeDelete(long nodeId) {
+        cancelPendingDelete();
+        pendingDelete = new PauseTransition(Duration.millis(DOUBLE_CLICK_DELAY_MS));
+        pendingDelete.setOnFinished(event -> {
+            pendingDelete = null;
+            GraphNode node = model.findNode(nodeId);
+            if (node != null) {
+                multiSelectedNodeIds.remove(nodeId);
+                execute(new DeleteNodeCommand(node, model.incidentArrows(nodeId)));
+            }
+        });
+        pendingDelete.play();
+    }
+
+    private void cancelPendingDelete() {
+        if (pendingDelete != null) {
+            pendingDelete.stop();
+            pendingDelete = null;
+        }
+    }
+
+    private void editLabel(GraphNode node) {
+        TextInputDialog dialog = new TextInputDialog(node.label());
+        dialog.initOwner(mainStage);
+        dialog.setTitle("Node label");
+        dialog.setHeaderText("Label for this node");
+        dialog.setContentText("Text:");
+        dialog.showAndWait().ifPresent(text -> {
+            String label = text.strip();
+            if (!label.equals(node.label())) {
+                execute(new RenameNodeCommand(node, label));
+            }
+        });
     }
 
     private void handleSecondaryClick(double x, double y, boolean additive) {
@@ -346,6 +404,7 @@ public class EditorApplication extends Application {
     }
 
     private void cancelInteraction() {
+        cancelPendingDelete();
         selection.clear();
         multiSelectedNodeIds.clear();
         primaryGestureActive = false;
@@ -461,6 +520,7 @@ public class EditorApplication extends Application {
             return;
         }
 
+        cancelPendingDelete();
         model.loadFrom(loaded.getNodes(), loaded.getArrows());
         // A loaded graph has no meaningful history back to the previous in-memory graph.
         undoStack.clear();
@@ -589,6 +649,8 @@ public class EditorApplication extends Application {
         gc.setLineWidth(2.0);
         gc.strokeOval(topLeftX, topLeftY, diameter, diameter);
 
+        drawLabel(node, center);
+
         if (multiSelectedNodeIds.contains(node.id())) {
             double ringInset = 4.0;
             gc.setStroke(MULTI_SELECT_COLOR);
@@ -602,6 +664,18 @@ public class EditorApplication extends Application {
             gc.strokeOval(topLeftX + ringInset, topLeftY + ringInset,
                     diameter - 2 * ringInset, diameter - 2 * ringInset);
         }
+    }
+
+    /** Centered on the node's effective (possibly pulled) position, like the circle itself. */
+    private void drawLabel(GraphNode node, double[] center) {
+        if (node.label().isEmpty()) {
+            return;
+        }
+        gc.setFill(LABEL_COLOR);
+        gc.setFont(LABEL_FONT);
+        gc.setTextAlign(TextAlignment.CENTER);
+        gc.setTextBaseline(VPos.CENTER);
+        gc.fillText(node.label(), center[0], center[1]);
     }
 
     private void drawArrow(GraphArrow arrow) {
