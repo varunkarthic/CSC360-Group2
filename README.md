@@ -1,191 +1,166 @@
-# CSC360 Course Project
+<h1 align="center">Graph Editor</h1>
 
-## Group 2
+<p align="center">
+  A JavaFX desktop app for drawing, connecting and editing directed graphs.
+</p>
 
-> A JavaFX desktop editor for creating, connecting, and editing directed graphs.
+<p align="center">
+  <img alt="Java 21" src="https://img.shields.io/badge/Java-21-437291?style=flat-square">
+  <img alt="JavaFX 23" src="https://img.shields.io/badge/JavaFX-23-2b6cb0?style=flat-square">
+  <img alt="Maven" src="https://img.shields.io/badge/build-Maven-c71a36?style=flat-square">
+  <img alt="27 unit tests" src="https://img.shields.io/badge/tests-27%20JUnit-2e8b57?style=flat-square">
+  <img alt="Zero dependencies beyond JavaFX" src="https://img.shields.io/badge/deps-JavaFX%20only-444?style=flat-square">
+</p>
+
+<p align="center">
+  <a href="#demo">Demo</a> ·
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#how-to-use">How to use</a> ·
+  <a href="#how-it-works">How it works</a> ·
+  <a href="#features-in-detail">Features</a> ·
+  <a href="#team">Team</a>
+</p>
 
 ---
 
-## Course Information
+Click to place nodes, drag to connect them, and the editor handles the rest:
+arrows clip cleanly to node edges, every action can be undone, and the whole
+graph saves to a plain JSON file.
 
-| Field | Details |
-| --- | --- |
-| **Course Code** | CSC360 |
-| **Course Name** | Computer Graphics and Digital Image Processing |
-| **Session** | Monsoon 2026 |
-| **Group** | 2 |
+- **Build graphs by mouse.** Place nodes, drag arrows between them, move them around.
+- **Bidirectional arrows.** Drag back along an existing arrow to make it two-way.
+- **Undo / redo everything.** Each action is a reversible command.
+- **Save / load JSON.** Human-readable files, no external libraries.
 
----
+## Team
 
-## Group Members
+**CSC360 · Computer Graphics and Digital Image Processing · Monsoon 2026 · Group 2**
 
-| No. | Name | Enrolment Number |
+| No. | Name | Enrolment No. |
 |:---:|:---|:---|
 | 1 | Varun | AU2520215 |
 | 2 | Satvik | AU2520039 |
 | 3 | Garv | AU2520247 |
 | 4 | Shambhavee | AU2500016 |
 
----
+## Demo
 
-## About The Project
+<p align="center">
+  <video src="https://github.com/varunkarthic/CSC360-Group2/raw/master/media/demo_video_1.mp4" controls muted width="100%"></video>
+</p>
 
-This project is an interactive JavaFX graph editor developed for CSC360. Users can visually construct directed graphs on an 800×600 canvas through intuitive mouse gestures. The editor implements robust geometric math for boundary clipping and hit detection, and provides complete reversible history (undo/redo) via custom linked-list stacks and the Command design pattern.
+<p align="center"><sub>Video not playing? <a href="media/demo_video_1.mp4">Open the demo file</a>.</sub></p>
 
-### Key Features
+## Quick start
 
-- **Fixed-Radius Node Placement:** Place solid nodes (radius 20 px) with centered coordinates.
-- **Proximity & Single-Selection:** Right-clicking on an existing node toggles selection with a visible gold highlight.
-- **Multi-Selection:** Shift + left-click on nodes toggles multi-selection with a distinct purple highlight ring.
-- **One-Shot Auto-Connect:** Select an existing node and right-click elsewhere on empty canvas to spawn a new node and automatically draw a directed arrow between them.
-- **Interactive Arrow Dragging:** Left-click and drag between two nodes to connect them.
-- **Bidirectional Arrows:** Dragging between two nodes with an existing reverse arrow upgrades it into a double-headed bidirectional arrow.
-- **Drag-to-Move Nodes:** Drag a node (or a multi-selection of nodes) to empty canvas space to reposition smoothly with exact coordinate translations.
-- **Drag-Connect Feedback:** While dragging, a dashed preview line tracks the cursor and the nearest candidate target node is visibly *pulled* toward it with eased, frame-by-frame motion, springing back when the drag ends. The displacement is purely cosmetic — hit detection always uses true node coordinates.
-- **Smart Boundary Clipping:** Arrows clip exactly to node perimeters using Euclidean unit vectors and render with filled directed arrowheads.
-- **Single-Click Deletion:** Stationary left-click deletes the targeted node (and all incident arrows) or arrow.
-- **Full Undo / Redo:** Every user action is encapsulated in a command and managed via two history stacks.
-- **Save / Load as JSON:** Persist a graph to a `.json` file and reopen it later, with id allocation resuming safely above every loaded id. The format is plain JSON written and parsed in-project, so the build stays dependency-free.
+**Requirement:** JDK 21. Maven is not needed; the included wrapper downloads it.
 
----
+| | macOS / Linux | Windows |
+|---|---|---|
+| **Run** | `./mvnw javafx:run` | `mvnw.cmd javafx:run` |
+| **Test** | `./mvnw test` | `mvnw.cmd test` |
 
-## Controls & Shortcuts
+## How to use
 
-| Action | Control |
-| --- | --- |
-| **Create a node** | Right-click (or `Ctrl+click`) on empty canvas |
-| **Select / deselect single node** | Right-click (or `Ctrl+click`) an existing node |
-| **Multi-select / deselect node** | `Shift` + Left-click on node |
-| **Auto-connect new node** | Select a node, then right-click on empty canvas |
-| **Connect two nodes** | Left-click and drag from source node to target node |
-| **Upgrade to bidirectional arrow** | Left-click and drag in reverse direction of existing arrow |
-| **Move node(s)** | Left-click and drag a node (or multi-selected nodes) to empty space |
-| **Preview a connection** | While dragging, a dashed line follows the cursor and the nearest target node is pulled toward it; it springs back on release |
-| **Delete a node or arrow** | Left-click on it (stationary click, no drag) |
-| **Undo** | **Undo** button or `Ctrl+Z` / `Cmd+Z` |
-| **Redo** | **Redo** button or `Ctrl+Y` / `Ctrl+Shift+Z` / `Cmd+Shift+Z` |
-| **Save graph to a file** | **Save** button (choose a `.json` destination) |
-| **Load graph from a file** | **Load** button (clears undo/redo history) |
-| **Cancel selection / drag** | `Escape` key |
+| To… | Do this |
+|---|---|
+| **Create a node** | Right-click (or `Ctrl`+click) empty canvas |
+| **Select a node** | Right-click it again to deselect |
+| **Create a node and connect it** | Select a node, then right-click empty canvas |
+| **Connect two nodes** | Left-drag from one node onto another |
+| **Make an arrow two-way** | Left-drag along an existing arrow in reverse |
+| **Move node(s)** | Left-drag a node to empty space |
+| **Multi-select** | `Shift` + left-click nodes (purple ring); drag one to move all |
+| **Delete a node or arrow** | Left-click it without dragging |
+| **Undo / Redo** | Buttons, or `Ctrl/Cmd+Z` and `Ctrl/Cmd+Shift+Z` (`Ctrl+Y` also redoes) |
+| **Save / Load** | **Save** / **Load** buttons (`.json`) |
+| **Cancel** | `Esc` |
 
----
+## How it works
 
-## Getting Started
+Four small layers. The UI never edits the graph directly; it wraps every change in a command.
 
-### Prerequisites
+```text
+ mouse / keyboard
+        │
+        ▼
+ EditorApplication ── draws ──▶ canvas
+        │  creates
+        ▼
+   EditCommand ──apply / undo──▶ GraphModel ◀── GraphJsonCodec (save / load)
+        │                            ▲
+   LinkedStack (undo, redo)          └── GeometryUtils (hit tests, arrow math)
+```
 
-- **Java Development Kit (JDK):** Version 21 (LTS) is recommended and is what the build targets.
-- A terminal (PowerShell, Command Prompt, or Bash). No local Maven install is required — the included Maven Wrapper (`mvnw` / `mvnw.cmd`) downloads and pins the exact Maven version the build was tested with.
+| Part | Role |
+|---|---|
+| **`EditorApplication`** | JavaFX window. Turns mouse gestures into commands and draws the canvas. |
+| **`EditCommand`** | Interface with `apply()` and `undo()`. Seven implementations cover every edit. |
+| **`LinkedStack<T>`** | Hand-written linked-list stack holding undo and redo history. |
+| **`GraphModel`** | Nodes, arrows, ID allocation and hit-test queries. |
+| **`GeometryUtils`** | Angles, boundary clipping, point-to-segment distance, easing maths. |
+| **`PullMotionModel`** | Cosmetic drag animation. Never touches the real graph. |
+| **`GraphJsonCodec`** | Writes and strictly parses the JSON format. |
 
----
+**Save format**
 
-### Running the Application
+```json
+{
+  "nodes":  [{"id": 1, "x": 120.0, "y": 80.0}],
+  "arrows": [{"id": 1, "sourceId": 1, "targetId": 2, "bidirectional": false}]
+}
+```
 
-- **macOS / Linux:**
-  ```bash
-  ./mvnw javafx:run
-  ```
+## Features in detail
 
-- **Windows (PowerShell or CMD):**
-  ```powershell
-  mvnw.cmd javafx:run
-  ```
+| Feature | What happens |
+|---|---|
+| **Fixed-size nodes** | Radius 20 px on an 800×600 canvas; a right-click too close to an existing node selects it instead of stacking a new one on top. |
+| **Selection** | Single select shows a gold ring, multi-select a purple ring. |
+| **Auto-connect** | Right-clicking empty space with a node selected creates the new node *and* its arrow as one undo step. |
+| **Boundary clipping** | Arrows start and end on the circle edge (via `atan2`), not the centre, with filled arrowheads. |
+| **Precise hit testing** | Arrows are clicked by point-to-segment distance (6 px tolerance). |
+| **Drag-connect preview** | A dashed line follows the cursor and the nearest target eases toward it, then springs back. Purely visual; real coordinates are always used for hit tests. |
+| **Bidirectional upgrade** | Reverse drag turns one arrow into a double-headed one instead of adding a duplicate. |
+| **Safe node deletion** | Removes the node plus its arrows; undo restores all of them. |
+| **Strict JSON loading** | Bad syntax, duplicate IDs, or arrows to missing nodes are rejected with a clear error. New IDs resume above the highest loaded ID. |
+| **Old files still open** | `bidirectional` is optional and defaults to `false`. |
 
-  (Or double-click `mvnw.cmd` from File Explorer inside the project folder.)
-
----
-
-### Running Tests
-
-- **macOS / Linux:**
-  ```bash
-  ./mvnw test
-  ```
-
-- **Windows (PowerShell or CMD):**
-  ```powershell
-  mvnw.cmd test
-  ```
-
----
-
-## Architecture & Design Patterns
-
-The application is structured into modular components adhering to object-oriented principles:
-
-1. **Command Pattern (`EditCommand`):**
-   - Every mutating user action implements `EditCommand` with `execute()` and `undo()` methods.
-   - Concrete commands:
-     - `AddNodeCommand`: Inserts a node.
-     - `DeleteNodeCommand`: Removes a node and preserves its incident arrows for undo.
-     - `AddArrowCommand`: Inserts a directed arrow between two nodes.
-     - `DeleteArrowCommand`: Removes an arrow and restores it on undo.
-     - `AddConnectedNodeCommand`: Atomically creates a node and connects it to the selected node.
-     - `UpgradeArrowCommand`: Reversibly upgrades a directed arrow to bidirectional.
-     - `MoveNodesCommand`: Reversibly translates one or more nodes by (dx, dy).
-
-2. **Custom Data Structure (`LinkedStack<T>`):**
-   - The undo and redo stacks are powered by a custom singly-linked list stack implementation (`push`, `pop`, `peek`, `size`, `isEmpty`), fulfilling project data structure requirements without using standard Java collection stacks.
-
-3. **Geometry Engine (`GeometryUtils`):**
-   - **`calculateAngle(x1, y1, x2, y2)`:** Computes vector angle for arrowhead orientation.
-   - **`trimmedSegment(x1, y1, x2, y2, radius)`:** Calculates exact intersection points where arrows meet circle boundaries.
-   - **`pointToSegmentDistance(px, py, x1, y1, x2, y2)`:** Orthogonal distance testing for precise arrow hit detection.
-   - **`lerp(a, b, t)`:** Linear interpolation; applied once per frame it yields the eased pull and spring-back motion.
-   - **`clampMagnitude(dx, dy, max)`:** Caps a displacement vector's length while preserving its direction.
-
-4. **Model Layer (`GraphModel`):**
-   - In-memory graph representation tracking nodes (`GraphNode`) and directed edges (`GraphArrow`) with sequential ID allocation.
-   - **`loadFrom(nodes, arrows)`:** Replaces all state when opening a file and restarts ID allocation above the highest loaded ID, so nodes created afterward cannot collide with loaded ones.
-
-5. **Animation Layer (`PullMotionModel`):**
-   - Holds per-node cosmetic `{dx, dy}` displacements driven by an `AnimationTimer`, easing the pulled node toward the cursor and back to rest. Kept separate from `GraphModel` so the graph itself is never mutated by animation, and so the easing logic is unit-testable without starting a JavaFX toolkit.
-
-6. **Persistence Layer (`GraphJsonCodec`):**
-   - Serializes a `GraphModel` to JSON and parses it back. Both directions are hand-written against the fixed, flat schema below, which keeps the project free of third-party dependencies. The reader is strict: malformed documents, duplicate IDs, and arrows referencing absent nodes raise `IllegalArgumentException` instead of loading a partial graph.
-
-   ```json
-   {
-     "nodes": [
-       {"id": 1, "x": 120.0, "y": 80.0}
-     ],
-     "arrows": [
-       {"id": 1, "sourceId": 1, "targetId": 2, "bidirectional": false}
-     ]
-   }
-   ```
-
-   `bidirectional` is optional on read and defaults to `false`, so graph files written before bidirectional arrows existed still open.
-
----
-
-## Repository Structure
+## Project structure
 
 ```text
 CSC360-Group2/
-├── pom.xml                                     Maven build script
-├── mvnw / mvnw.cmd                             Maven wrapper scripts
-├── .mvn/wrapper/                               Maven wrapper distribution config
-├── README.md                                   Project documentation
+├── pom.xml                  Maven build
+├── mvnw, mvnw.cmd           Maven wrapper
+├── test.json                Sample graph to try Load
+├── media/demo_video_1.mp4   Demo recording
 └── src/
     ├── main/java/com/example/grapheditor/
-    │   ├── AddArrowCommand.java                Command to add arrow
-    │   ├── AddConnectedNodeCommand.java        Atomic command to add connected node
-    │   ├── AddNodeCommand.java                 Command to add node
-    │   ├── DeleteArrowCommand.java             Command to delete arrow
-    │   ├── DeleteNodeCommand.java              Command to delete node & cascade edges
-    │   ├── EditCommand.java                    Command interface
-    │   ├── EditorApplication.java              JavaFX GUI application and canvas controller
-    │   ├── GeometryUtils.java                  Geometry, easing, and hit-testing helpers
-    │   ├── GraphArrow.java                     Directed/bidirectional arrow record
-    │   ├── GraphJsonCodec.java                 JSON save/load serializer and parser
-    │   ├── GraphModel.java                     Graph state and entity manager
-    │   ├── GraphNode.java                      Node model (id, position, radius)
-    │   ├── LinkedStack.java                    Custom linked-list stack for history
-    │   ├── Main.java                           JavaFX launcher class
-    │   ├── MoveNodesCommand.java               Command to translate one or more nodes
-    │   ├── PullMotionModel.java                Cosmetic drag-pull offsets and easing
-    │   └── UpgradeArrowCommand.java            Command to upgrade arrow to bidirectional
+    │   ├── Main.java                  Launcher
+    │   ├── EditorApplication.java     UI, gestures, rendering
+    │   ├── EditCommand.java           Command interface
+    │   ├── Add{Node,Arrow,ConnectedNode}Command.java
+    │   ├── Delete{Node,Arrow}Command.java
+    │   ├── UpgradeArrowCommand.java
+    │   ├── MoveNodesCommand.java
+    │   ├── LinkedStack.java           Undo / redo stack
+    │   ├── GraphModel.java            Graph state and queries
+    │   ├── GraphNode.java             Node record
+    │   ├── GraphArrow.java            Arrow record
+    │   ├── GeometryUtils.java         Geometry helpers
+    │   ├── PullMotionModel.java       Drag-pull animation state
+    │   └── GraphJsonCodec.java        JSON save / load
     └── test/java/com/example/grapheditor/
-        └── EditorLogicTest.java                Unit tests for geometry, models, and stack
+        └── EditorLogicTest.java       27 unit tests
 ```
+
+## Team
+
+**CSC360 · Computer Graphics and Digital Image Processing · Monsoon 2026 · Group 2**
+
+| No. | Name | Enrolment No. |
+|:---:|:---|:---|
+| 1 | Varun | AU2520215 |
+| 2 | Satvik | AU2520039 |
+| 3 | Garv | AU2520247 |
+| 4 | Shambhavee | AU2500016 |
