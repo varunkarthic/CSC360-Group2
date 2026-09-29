@@ -18,6 +18,7 @@
   <a href="#how-to-use">How to use</a> ·
   <a href="#how-it-works">How it works</a> ·
   <a href="#features-in-detail">Features</a> ·
+  <a href="technical_details.md">Technical details</a> ·
   <a href="#team">Team</a>
 </p>
 
@@ -31,6 +32,8 @@ graph saves to a plain JSON file.
 - **Bidirectional arrows.** Drag back along an existing arrow to make it two-way.
 - **Undo / redo everything.** Each action is a reversible command.
 - **Save / load JSON.** Human-readable files, no external libraries.
+
+> **Next read:** [technical_details.md](technical_details.md) covers the packages used, architecture, algorithms, file format and limitations in depth.
 
 ## Team
 
@@ -72,7 +75,7 @@ graph saves to a plain JSON file.
 | **Move node(s)** | Left-drag a node to empty space |
 | **Multi-select** | `Shift` + left-click nodes (purple ring); drag one to move all |
 | **Delete a node or arrow** | Left-click it without dragging |
-| **Undo / Redo** | Buttons, or `Ctrl/Cmd+Z` and `Ctrl/Cmd+Shift+Z` (`Ctrl+Y` also redoes) |
+| **Undo / Redo** | Buttons, or `Ctrl/Cmd+Z` and `Ctrl/Cmd+Shift+Z` |
 | **Save / Load** | **Save** / **Load** buttons (`.json`) |
 | **Cancel** | `Esc` |
 
@@ -132,6 +135,7 @@ Four small layers. The UI never edits the graph directly; it wraps every change 
 CSC360-Group2/
 ├── pom.xml                  Maven build
 ├── mvnw, mvnw.cmd           Maven wrapper
+├── technical_details.md     In-depth technical documentation
 ├── test.json                Sample graph to try Load
 ├── media/demo_video_1.mp4   Demo recording
 └── src/
