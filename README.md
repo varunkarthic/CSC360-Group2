@@ -73,6 +73,7 @@ graph saves to a plain JSON file.
 | **Connect two nodes** | Left-drag from one node onto another |
 | **Make an arrow two-way** | Left-drag along an existing arrow in reverse |
 | **Move node(s)** | Left-drag a node to empty space |
+| **Select several for auto-connect** | `Shift` + right-click nodes (orange rings); then right-click empty space to add one node linked from every selected node |
 | **Multi-select** | `Shift` + left-click nodes (purple ring); drag one to move all |
 | **Delete a node or arrow** | Left-click it without dragging |
 | **Undo / Redo** | Buttons, or `Ctrl/Cmd+Z` and `Ctrl/Cmd+Shift+Z` |
@@ -102,6 +103,7 @@ Four small layers. The UI never edits the graph directly; it wraps every change 
 | **`LinkedStack<T>`** | Hand-written linked-list stack holding undo and redo history. |
 | **`GraphModel`** | Nodes, arrows, ID allocation and hit-test queries. |
 | **`GeometryUtils`** | Angles, boundary clipping, point-to-segment distance, easing maths. |
+| **`SelectionState`** | The orange auto-connect selection and its toggle rules. |
 | **`EditorHints`** | Chooses the short instruction line in the top bar for the current state. |
 | **`PullMotionModel`** | Cosmetic drag animation. Never touches the real graph. |
 | **`GraphJsonCodec`** | Writes and strictly parses the JSON format. |
@@ -121,7 +123,7 @@ Four small layers. The UI never edits the graph directly; it wraps every change 
 |---|---|
 | **Fixed-size nodes** | Radius 20 px on an 800×600 canvas; a right-click too close to an existing node selects it instead of stacking a new one on top. |
 | **Selection** | Single select shows an orange ring, multi-select a purple ring. |
-| **Auto-connect** | Right-clicking empty space with a node selected creates the new node *and* its arrow as one undo step, and the orange ring disappears as soon as the arrow is drawn. |
+| **Auto-connect** | Right-clicking empty space with one or more nodes selected (`Shift` + right-click adds more) creates the new node *and* an arrow from each selected node as one undo step, and the orange ring disappears as soon as the arrow is drawn. |
 | **Context hints** | The top bar shows a one-line tip that changes with the state: idle, node selected, multi-selected, or dragging a connection. |
 | **Boundary clipping** | Arrows start and end on the circle edge (via `atan2`), not the centre, with filled arrowheads. |
 | **Precise hit testing** | Arrows are clicked by point-to-segment distance (6 px tolerance). |
@@ -155,6 +157,7 @@ CSC360-Group2/
     │   ├── GraphArrow.java            Arrow record
     │   ├── GeometryUtils.java         Geometry helpers
     │   ├── EditorHints.java           Top-bar hint text per state
+    │   ├── SelectionState.java        Orange auto-connect selection
     │   ├── PullMotionModel.java       Drag-pull animation state
     │   └── GraphJsonCodec.java        JSON save / load
     └── test/java/com/example/grapheditor/
