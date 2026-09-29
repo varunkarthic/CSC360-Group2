@@ -3,11 +3,13 @@ package com.example.grapheditor;
 import javafx.animation.AnimationTimer;
 import javafx.application.Application;
 import javafx.geometry.Insets;
+import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
+import javafx.scene.control.Label;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
 import javafx.scene.input.KeyCombination;
@@ -89,6 +91,7 @@ public class EditorApplication extends Application {
 
     private Stage mainStage;
     private GraphicsContext gc;
+    private Label hintLabel;
 
     @Override
     public void start(Stage primaryStage) {
@@ -109,7 +112,10 @@ public class EditorApplication extends Application {
         saveButton.setOnAction(event -> saveGraph());
         Button loadButton = new Button("Load");
         loadButton.setOnAction(event -> loadGraph());
-        HBox toolbar = new HBox(8, undoButton, redoButton, saveButton, loadButton);
+        hintLabel = new Label(EditorHints.IDLE);
+        hintLabel.setTextFill(Color.web("#475569"));
+        HBox toolbar = new HBox(8, undoButton, redoButton, saveButton, loadButton, hintLabel);
+        toolbar.setAlignment(Pos.CENTER_LEFT);
         toolbar.setPadding(new Insets(8));
 
         BorderPane root = new BorderPane();
@@ -517,6 +523,10 @@ public class EditorApplication extends Application {
      * Hit testing deliberately stays on the real coordinates.
      */
     private void render() {
+        if (hintLabel != null) {
+            hintLabel.setText(EditorHints.hintFor(
+                    connectDragActive(), selectedNodeId != null, multiSelectedNodeIds.size()));
+        }
         clearCanvas();
         for (GraphArrow arrow : model.getArrows()) {
             drawArrow(arrow);
