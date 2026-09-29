@@ -1,0 +1,16 @@
+{
+  "nodes": [
+    {"id": 1, "x": 207.0, "y": 89.0},
+    {"id": 3, "x": 608.0, "y": 84.0},
+    {"id": 4, "x": 471.0, "y": 431.0},
+    {"id": 5, "x": 433.0, "y": 203.0}
+  ],
+  "arrows": [
+    {"id": 2, "sourceId": 1, "targetId": 4, "bidirectional": true},
+    {"id": 3, "sourceId": 3, "targetId": 4, "bidirectional": true},
+    {"id": 4, "sourceId": 3, "targetId": 1, "bidirectional": true},
+    {"id": 5, "sourceId": 3, "targetId": 5, "bidirectional": false},
+    {"id": 6, "sourceId": 5, "targetId": 4, "bidirectional": true},
+    {"id": 7, "sourceId": 5, "targetId": 1, "bidirectional": true}
+  ]
+}

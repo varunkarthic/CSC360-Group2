@@ -216,7 +216,7 @@ public class EditorApplication extends Application {
         if (pressHitNodeId == null) {
             return;
         }
-        GraphNode target = model.hitNodeBody(releaseX, releaseY, NODE_RADIUS);
+        GraphNode target = resolveConnectTarget(releaseX, releaseY);
         if (target != null && target.id() != pressHitNodeId) {
             // Drag to another node -> connect or upgrade to bidirectional
             if (model.arrowExists(pressHitNodeId, target.id())) {
@@ -255,6 +255,21 @@ public class EditorApplication extends Application {
                 }
             }
         }
+    }
+
+    /**
+     * The node a drag release should connect to. Falls back from the precise
+     * node-body hit test to the same {@link PullMotionModel#PULL_RADIUS} used for
+     * the visual pull feedback, so a release that looked like a successful connect
+     * (the target was visibly tugged toward the cursor) actually completes as one
+     * instead of silently being reinterpreted as a move of the pressed node(s).
+     */
+    private GraphNode resolveConnectTarget(double releaseX, double releaseY) {
+        GraphNode hit = model.hitNodeBody(releaseX, releaseY, NODE_RADIUS);
+        if (hit != null) {
+            return hit;
+        }
+        return model.nearestNodeWithin(releaseX, releaseY, PullMotionModel.PULL_RADIUS, pressHitNodeId);
     }
 
     private void completeClick(double x, double y, boolean isShiftDown) {
