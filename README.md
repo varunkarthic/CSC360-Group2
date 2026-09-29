@@ -8,7 +8,7 @@
   <img alt="Java 21" src="https://img.shields.io/badge/Java-21-437291?style=flat-square">
   <img alt="JavaFX 23" src="https://img.shields.io/badge/JavaFX-23-2b6cb0?style=flat-square">
   <img alt="Maven" src="https://img.shields.io/badge/build-Maven-c71a36?style=flat-square">
-  <img alt="27 unit tests" src="https://img.shields.io/badge/tests-27%20JUnit-2e8b57?style=flat-square">
+  <img alt="44 unit tests" src="https://img.shields.io/badge/tests-44%20JUnit-2e8b57?style=flat-square">
   <img alt="Zero dependencies beyond JavaFX" src="https://img.shields.io/badge/deps-JavaFX%20only-444?style=flat-square">
 </p>
 
@@ -26,12 +26,13 @@
 
 Click to place nodes, drag to connect them, and the editor handles the rest:
 arrows clip cleanly to node edges, every action can be undone, and the whole
-graph saves to a plain JSON file.
+graph saves to a plain JSON file or exports to PNG/SVG.
 
 - **Build graphs by mouse.** Place nodes, drag arrows between them, move them around.
 - **Bidirectional arrows.** Drag back along an existing arrow to make it two-way.
 - **Undo / redo everything.** Each action is a reversible command.
 - **Save / load JSON.** Human-readable files, no external libraries.
+- **Export PNG / SVG.** Snapshot the canvas to PNG or export vector-clean SVG.
 
 > **Next read:** [technical_details.md](technical_details.md) covers the packages used, architecture, algorithms, file format and limitations in depth.
 
@@ -83,6 +84,7 @@ graph saves to a plain JSON file.
 | **Delete a node or arrow** | Left-click it without dragging (a node is deleted after a brief 0.3 s pause, so a double-click can label it instead) |
 | **Undo / Redo** | Buttons, or `Ctrl/Cmd+Z` and `Ctrl/Cmd+Shift+Z` |
 | **Save / Load** | **Save** / **Load** buttons (`.json`) |
+| **Export PNG / SVG** | **Export PNG** / **Export SVG** buttons |
 | **Cancel** | `Esc` |
 
 ## How it works
@@ -97,13 +99,13 @@ Four small layers. The UI never edits the graph directly; it wraps every change 
         │  creates
         ▼
    EditCommand ──apply / undo──▶ GraphModel ◀── GraphJsonCodec (save / load)
-        │                            ▲
+        │                            ▲      ◀── GraphSvgExporter (export SVG)
    LinkedStack (undo, redo)          └── GeometryUtils (hit tests, arrow math)
 ```
 
 | Part | Role |
 |---|---|
-| **`EditorApplication`** | JavaFX window. Turns mouse gestures into commands and draws the canvas. |
+| **`EditorApplication`** | JavaFX window. Turns mouse gestures into commands, manages export dialogs, and draws the canvas. |
 | **`EditCommand`** | Interface with `apply()` and `undo()`. Eight implementations cover every edit, including `RenameNodeCommand`. |
 | **`LinkedStack<T>`** | Hand-written linked-list stack holding undo and redo history. |
 | **`GraphModel`** | Nodes, arrows, ID allocation and hit-test queries. |
@@ -112,6 +114,7 @@ Four small layers. The UI never edits the graph directly; it wraps every change 
 | **`EditorHints`** | Chooses the short instruction line in the top bar for the current state. |
 | **`PullMotionModel`** | Cosmetic drag animation. Never touches the real graph. |
 | **`GraphJsonCodec`** | Writes and strictly parses the JSON format. |
+| **`GraphSvgExporter`** | Pure vector exporter converting `GraphModel` directly to well-formed SVG. |
 
 **Save format**
 
@@ -140,6 +143,7 @@ Four small layers. The UI never edits the graph directly; it wraps every change 
 | **Safe node deletion** | Removes the node plus its arrows; undo restores all of them. |
 | **Strict JSON loading** | Bad syntax, duplicate IDs, or arrows to missing nodes are rejected with a clear error. New IDs resume above the highest loaded ID. |
 | **Old files still open** | `bidirectional` is optional and defaults to `false`. |
+| **PNG & SVG export** | One-click export via toolbar buttons: PNG via JavaFX canvas snapshot and `SwingFXUtils`, SVG via pure vector exporter matching canvas styling. |
 
 ## Project structure
 
@@ -153,7 +157,7 @@ CSC360-Group2/
 └── src/
     ├── main/java/com/example/grapheditor/
     │   ├── Main.java                  Launcher
-    │   ├── EditorApplication.java     UI, gestures, rendering
+    │   ├── EditorApplication.java     UI, gestures, rendering, export
     │   ├── EditCommand.java           Command interface
     │   ├── Add{Node,Arrow,ConnectedNode}Command.java
     │   ├── Delete{Node,Arrow}Command.java
@@ -168,9 +172,10 @@ CSC360-Group2/
     │   ├── EditorHints.java           Top-bar hint text per state
     │   ├── SelectionState.java        Orange auto-connect selection
     │   ├── PullMotionModel.java       Drag-pull animation state
-    │   └── GraphJsonCodec.java        JSON save / load
+    │   ├── GraphJsonCodec.java        JSON save / load
+    │   └── GraphSvgExporter.java      Vector SVG export
     └── test/java/com/example/grapheditor/
-        └── EditorLogicTest.java       27 unit tests
+        └── EditorLogicTest.java       44 unit tests
 ```
 
 ## Team

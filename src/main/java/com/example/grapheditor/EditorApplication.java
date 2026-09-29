@@ -27,6 +27,10 @@ import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 
+import javafx.embed.swing.SwingFXUtils;
+import javafx.scene.image.WritableImage;
+
+import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -35,6 +39,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import javax.imageio.ImageIO;
 
 /**
  * JavaFX node/arrow graph editor.
@@ -105,13 +110,14 @@ public class EditorApplication extends Application {
     private PauseTransition pendingDelete;
 
     private Stage mainStage;
+    private Canvas canvas;
     private GraphicsContext gc;
     private Label hintLabel;
 
     @Override
     public void start(Stage primaryStage) {
         mainStage = primaryStage;
-        Canvas canvas = new Canvas(CANVAS_WIDTH, CANVAS_HEIGHT);
+        canvas = new Canvas(CANVAS_WIDTH, CANVAS_HEIGHT);
         gc = canvas.getGraphicsContext2D();
 
         canvas.setOnMousePressed(this::handleMousePressed);
@@ -127,9 +133,14 @@ public class EditorApplication extends Application {
         saveButton.setOnAction(event -> saveGraph());
         Button loadButton = new Button("Load");
         loadButton.setOnAction(event -> loadGraph());
+        Button exportPngButton = new Button("Export PNG");
+        exportPngButton.setOnAction(event -> exportPng());
+        Button exportSvgButton = new Button("Export SVG");
+        exportSvgButton.setOnAction(event -> exportSvg());
         hintLabel = new Label(EditorHints.IDLE);
         hintLabel.setTextFill(Color.web("#475569"));
-        HBox toolbar = new HBox(8, undoButton, redoButton, saveButton, loadButton, hintLabel);
+        HBox toolbar = new HBox(8, undoButton, redoButton, saveButton, loadButton,
+                exportPngButton, exportSvgButton, hintLabel);
         toolbar.setAlignment(Pos.CENTER_LEFT);
         toolbar.setPadding(new Insets(8));
 
@@ -530,6 +541,42 @@ public class EditorApplication extends Application {
         pressHitNodeId = null;
         pullMotion.reset();
         render();
+    }
+
+    private void exportPng() {
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Export PNG");
+        chooser.getExtensionFilters().add(
+                new FileChooser.ExtensionFilter("PNG image (*.png)", "*.png"));
+        chooser.setInitialFileName("graph.png");
+        File file = chooser.showSaveDialog(mainStage);
+        if (file == null) {
+            return;
+        }
+        try {
+            WritableImage img = canvas.snapshot(null, null);
+            BufferedImage buffered = SwingFXUtils.fromFXImage(img, null);
+            ImageIO.write(buffered, "png", file);
+        } catch (IOException e) {
+            showError("Could not export PNG", describe(e));
+        }
+    }
+
+    private void exportSvg() {
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Export SVG");
+        chooser.getExtensionFilters().add(
+                new FileChooser.ExtensionFilter("SVG image (*.svg)", "*.svg"));
+        chooser.setInitialFileName("graph.svg");
+        File file = chooser.showSaveDialog(mainStage);
+        if (file == null) {
+            return;
+        }
+        try {
+            Files.writeString(file.toPath(), GraphSvgExporter.toSvg(model), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            showError("Could not export SVG", describe(e));
+        }
     }
 
     private File chooseGraphFile(boolean forSaving) {

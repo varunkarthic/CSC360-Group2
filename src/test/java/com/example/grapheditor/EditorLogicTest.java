@@ -782,4 +782,98 @@ public class EditorLogicTest {
         assertTrue(EditorHints.IDLE.contains("Double-click"));
         assertTrue(EditorHints.IDLE.length() <= 80);
     }
+
+    @Test
+    @DisplayName("Issue #15: GraphSvgExporter exports empty model with valid SVG root and no shapes")
+    void testSvgExportEmptyModel() {
+        GraphModel model = new GraphModel();
+        String svg = GraphSvgExporter.toSvg(model);
+
+        assertTrue(svg.startsWith("<svg width=\"800\" height=\"600\" xmlns=\"http://www.w3.org/2000/svg\">"));
+        assertTrue(svg.endsWith("</svg>\n"));
+        assertFalse(svg.contains("<circle"));
+        assertFalse(svg.contains("<line"));
+        assertFalse(svg.contains("<polygon"));
+        assertFalse(svg.contains("<text"));
+    }
+
+    @Test
+    @DisplayName("Issue #15: GraphSvgExporter exports nodes, arrows, arrowheads and labels matching canvas geometry")
+    void testSvgExportSmallModel() {
+        GraphModel model = new GraphModel();
+        long id1 = model.allocateNodeId();
+        long id2 = model.allocateNodeId();
+        model.addNode(new GraphNode(id1, 100.0, 100.0, "Start"));
+        model.addNode(new GraphNode(id2, 300.0, 100.0));
+        model.addArrow(new GraphArrow(model.allocateArrowId(), id1, id2, false));
+
+        String svg = GraphSvgExporter.toSvg(model);
+
+        // Expected counts
+        assertEquals(2, countOccurrences(svg, "<circle"));
+        assertEquals(1, countOccurrences(svg, "<line"));
+        assertEquals(1, countOccurrences(svg, "<polygon"));
+        assertEquals(1, countOccurrences(svg, "<text"));
+
+        // Trimmed connector line starts at 120.0 and ends at 280.0
+        assertTrue(svg.contains("<line x1=\"120.0\" y1=\"100.0\" x2=\"280.0\" y2=\"100.0\""));
+        assertTrue(svg.contains("stroke=\"#334155\" stroke-width=\"2.5\""));
+
+        // Arrowhead polygon at (280.0, 100.0)
+        assertTrue(svg.contains("<polygon points=\"280.0,100.0 "));
+        assertTrue(svg.contains("fill=\"#dc2626\""));
+
+        // Circle nodes
+        assertTrue(svg.contains("<circle cx=\"100.0\" cy=\"100.0\" r=\"20.0\" fill=\"#3b82f6\" stroke=\"#1d4ed8\" stroke-width=\"2.0\"/>"));
+        assertTrue(svg.contains("<circle cx=\"300.0\" cy=\"100.0\" r=\"20.0\" fill=\"#3b82f6\" stroke=\"#1d4ed8\" stroke-width=\"2.0\"/>"));
+
+        // Label text element
+        assertTrue(svg.contains("<text x=\"100.0\" y=\"100.0\" text-anchor=\"middle\" dominant-baseline=\"central\" fill=\"#ffffff\" font-size=\"11\" font-family=\"sans-serif\">Start</text>"));
+    }
+
+    @Test
+    @DisplayName("Issue #15: Bidirectional arrows export two arrowhead polygons")
+    void testSvgExportBidirectionalArrow() {
+        GraphModel model = new GraphModel();
+        long id1 = model.allocateNodeId();
+        long id2 = model.allocateNodeId();
+        model.addNode(new GraphNode(id1, 100.0, 100.0));
+        model.addNode(new GraphNode(id2, 300.0, 100.0));
+        model.addArrow(new GraphArrow(model.allocateArrowId(), id1, id2, true));
+
+        String svg = GraphSvgExporter.toSvg(model);
+
+        assertEquals(1, countOccurrences(svg, "<line"));
+        assertEquals(2, countOccurrences(svg, "<polygon"), "bidirectional arrow has arrowheads at both ends");
+        assertTrue(svg.contains("<polygon points=\"280.0,100.0 "));
+        assertTrue(svg.contains("<polygon points=\"120.0,100.0 "));
+    }
+
+    @Test
+    @DisplayName("Issue #15: Node labels in SVG properly escape special XML characters")
+    void testSvgExportLabelXmlEscaping() {
+        GraphModel model = new GraphModel();
+        model.addNode(new GraphNode(model.allocateNodeId(), 200.0, 200.0, "<A & B > \" '"));
+
+        String svg = GraphSvgExporter.toSvg(model);
+
+        assertTrue(svg.contains("&lt;A &amp; B &gt; &quot; &apos;"));
+        assertFalse(svg.contains("<A & B >"));
+    }
+
+    @Test
+    @DisplayName("Issue #15: GraphSvgExporter throws NullPointerException on null model")
+    void testSvgExportNullModelThrows() {
+        assertThrows(NullPointerException.class, () -> GraphSvgExporter.toSvg(null));
+    }
+
+    private static int countOccurrences(String text, String substring) {
+        int count = 0;
+        int idx = 0;
+        while ((idx = text.indexOf(substring, idx)) != -1) {
+            count++;
+            idx += substring.length();
+        }
+        return count;
+    }
 }

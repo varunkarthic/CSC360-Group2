@@ -29,12 +29,12 @@ Deep-dive into how the Graph Editor is built. For what it does and how to run it
 | **Language** | Java 21 |
 | **UI toolkit** | JavaFX 23.0.2 (`Canvas` 2D drawing) |
 | **Build** | Maven 3.9.9 via the Maven Wrapper |
-| **Tests** | JUnit 5.11.4, 27 tests |
-| **Java package** | `com.example.grapheditor` (single flat package, 17 classes) |
-| **Size** | about 1,700 lines of main code, about 550 lines of tests |
+| **Tests** | JUnit 5.11.4, 44 tests |
+| **Java package** | `com.example.grapheditor` (single flat package, 18 classes) |
+| **Size** | about 1,800 lines of main code, about 650 lines of tests |
 | **Module system** | Not used (no `module-info.java`); runs on the classpath |
 
-The user edits a **directed graph** on an 800×600 canvas. All edits are wrapped in **command objects** so they can be undone and redone. The graph can be saved to and loaded from a **JSON** file. A short **animation** gives feedback while dragging a connection.
+The user edits a **directed graph** on an 800×600 canvas. All edits are wrapped in **command objects** so they can be undone and redone. The graph can be saved to and loaded from a **JSON** file, or exported to **PNG** and **SVG**. A short **animation** gives feedback while dragging a connection.
 
 ---
 
@@ -46,11 +46,12 @@ The user edits a **directed graph** on an 800×600 canvas. All edits are wrapped
 |---|---|---|---|
 | `org.openjfx:javafx-controls` | 23.0.2 | compile | Buttons, alerts, layout controls |
 | `org.openjfx:javafx-graphics` | 23.0.2 | compile | Stage, Scene, Canvas, input events, animation |
+| `org.openjfx:javafx-swing` | 23.0.2 | compile | Canvas snapshot conversion to `BufferedImage` (`SwingFXUtils`) for PNG export |
 | `org.junit.jupiter:junit-jupiter` | 5.11.4 (via BOM) | test | Test framework and assertions |
 | `org.junit.platform:junit-platform-launcher` | 5.11.4 (via BOM) | test | Lets Surefire launch JUnit 5 |
 | `org.junit:junit-bom` | 5.11.4 | import | Keeps all JUnit artifacts on matching versions |
 
-`javafx-base` comes in automatically as a dependency of the two JavaFX modules above. No JSON, logging or utility libraries are used.
+`javafx-base` comes in automatically as a dependency of the JavaFX modules above. No JSON, logging or external graphic utility libraries are used.
 
 ### 2.2 Build plugins
 
@@ -75,6 +76,8 @@ The compiler is configured with `maven.compiler.release=21` and UTF-8 source enc
 | `javafx.scene.paint` | `Color` | Palette |
 | `javafx.geometry` | `Insets` | Toolbar padding |
 | `javafx.animation` | `AnimationTimer` | Per-frame animation loop |
+| `javafx.embed.swing` | `SwingFXUtils` | Converts JavaFX `WritableImage` to AWT `BufferedImage` |
+| `javafx.scene.image` | `WritableImage` | Snapshot target for canvas image export |
 
 Only `EditorApplication` imports JavaFX. Every other class is plain Java, which is why the logic can be unit-tested without starting a UI.
 
@@ -82,10 +85,12 @@ Only `EditorApplication` imports JavaFX. Every other class is plain Java, which 
 
 | Package | Used for |
 |---|---|
-| `java.util` | `List`, `Map`, `LinkedHashMap`, `Set`, `HashSet`, `ArrayList`, `Iterator`, `Objects`, `NoSuchElementException` |
+| `java.util` | `List`, `Map`, `LinkedHashMap`, `Set`, `HashSet`, `ArrayList`, `Iterator`, `Objects`, `NoSuchElementException`, `Locale` |
 | `java.util.function` | `BiConsumer` (JSON writer helper) |
 | `java.nio.file` / `java.nio.charset` | `Files.readString` / `writeString` with UTF-8 |
 | `java.io` | `File` (from `FileChooser`), `IOException` |
+| `java.awt.image` | `BufferedImage` (for PNG image export via `ImageIO`) |
+| `javax.imageio` | `ImageIO.write` (PNG writing) |
 
 Java language features used: **records** (`GraphNode`, `GraphArrow`), **pattern matching for `instanceof`** (JSON reader), **generics** (`LinkedStack<T>`), lambdas and method references, `final` and static nested classes.
 
@@ -424,11 +429,23 @@ Load: FileChooser → Files.readString → fromJson
 
 The file is fully parsed and validated into a **separate** `GraphModel` first, and only then copied in. A bad file can never leave a half-loaded graph.
 
+### 11.5 PNG and SVG Export
+
+- **PNG Export (`exportPng`):**
+  Takes an immediate snapshot of the JavaFX `Canvas` via `canvas.snapshot(null, null)`, converts the `WritableImage` to an AWT `BufferedImage` using `SwingFXUtils.fromFXImage(img, null)`, and writes the raster image via `ImageIO.write(buffered, "png", file)`. A `FileChooser` with a `*.png` extension filter lets the user choose the destination file.
+- **SVG Export (`exportSvg` / `GraphSvgExporter`):**
+  Iterates over the `GraphModel` directly and outputs clean vector `<svg>` markup:
+  - `<line>` per arrow, trimmed to circle perimeters with `GeometryUtils.trimmedSegment`.
+  - `<polygon>` per arrowhead (one for directed arrows, two for bidirectional arrows).
+  - `<circle>` per node with radius 20 px, filled `#3b82f6` with stroke `#1d4ed8`.
+  - `<text>` per node label (with XML special characters escaped).
+  `GraphSvgExporter` is a pure function without JavaFX imports, making it fast and unit-testable.
+
 ---
 
 ## 12. Testing
 
-`EditorLogicTest` (JUnit 5, 27 tests) exercises everything except the JavaFX window. No JavaFX toolkit is started; tests run headless.
+`EditorLogicTest` (JUnit 5, 44 tests) exercises everything except the JavaFX window. No JavaFX toolkit is started; tests run headless.
 
 | Area | Tests cover |
 |---|---|
