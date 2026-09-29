@@ -13,12 +13,12 @@ import java.util.function.BiConsumer;
  * Converts a {@link GraphModel} to and from a flat JSON document, so a graph can be
  * saved to disk and reopened later.
  *
- * <p>The schema is two arrays of fixed-shape objects whose fields are numbers and
- * booleans:</p>
+ * <p>The schema is two arrays of fixed-shape objects whose fields are numbers,
+ * booleans and (for node labels) strings:</p>
  * <pre>
  * {
  *   "nodes": [
- *     {"id": 1, "x": 120.0, "y": 80.0}
+ *     {"id": 1, "x": 120.0, "y": 80.0, "label": "Start"}
  *   ],
  *   "arrows": [
  *     {"id": 1, "sourceId": 1, "targetId": 2, "bidirectional": false}
@@ -29,9 +29,10 @@ import java.util.function.BiConsumer;
  * <p>Because that shape is this narrow, both directions are hand-written and the
  * project stays dependency-free (JavaFX and JUnit only). The reader is deliberately
  * strict: a malformed or internally inconsistent document raises
- * {@link IllegalArgumentException} rather than loading a partial graph. The one
- * exception is {@code bidirectional}, which is optional and defaults to false so
- * that files written before bidirectional arrows existed still open.</p>
+ * {@link IllegalArgumentException} rather than loading a partial graph. The
+ * exceptions are {@code bidirectional} (defaults to false) and a node's {@code label}
+ * (defaults to empty), both optional so that files written before those fields
+ * existed still open. Labels are written only when non-empty.</p>
  */
 public final class GraphJsonCodec {
 
@@ -56,11 +57,15 @@ public final class GraphJsonCodec {
         Objects.requireNonNull(model, "model");
 
         StringBuilder json = new StringBuilder("{\n");
-        appendArray(json, NODES_KEY, model.getNodes(), (out, node) -> out
-                .append("{\"id\": ").append(node.id())
+        appendArray(json, NODES_KEY, model.getNodes(), (out, node) -> {
+            out.append("{\"id\": ").append(node.id())
                 .append(", \"x\": ").append(formatCoordinate(node.x()))
-                .append(", \"y\": ").append(formatCoordinate(node.y()))
-                .append('}'));
+                .append(", \"y\": ").append(formatCoordinate(node.y()));
+            if (!node.label().isEmpty()) {
+                out.append(", \"label\": ").append(quote(node.label()));
+            }
+            out.append('}');
+        });
         json.append(",\n");
         appendArray(json, ARROWS_KEY, model.getArrows(), (out, arrow) -> out
                 .append("{\"id\": ").append(arrow.id())
@@ -83,6 +88,29 @@ public final class GraphJsonCodec {
             writeItem.accept(json, items.get(i));
         }
         json.append("\n  ]");
+    }
+
+    /** A JSON string literal: quotes, backslashes and control characters are escaped. */
+    private static String quote(String text) {
+        StringBuilder out = new StringBuilder("\"");
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            switch (c) {
+                case '"' -> out.append("\\\"");
+                case '\\' -> out.append("\\\\");
+                case '\n' -> out.append("\\n");
+                case '\r' -> out.append("\\r");
+                case '\t' -> out.append("\\t");
+                default -> {
+                    if (c < 0x20) {
+                        out.append(String.format("\\u%04x", (int) c));
+                    } else {
+                        out.append(c);
+                    }
+                }
+            }
+        }
+        return out.append('"').toString();
     }
 
     /**
@@ -130,7 +158,8 @@ public final class GraphJsonCodec {
             }
             nodes.add(new GraphNode(id,
                     requireNumber(fields, "x", NODES_KEY),
-                    requireNumber(fields, "y", NODES_KEY)));
+                    requireNumber(fields, "y", NODES_KEY),
+                    optionalString(fields, "label", NODES_KEY)));
         }
 
         List<GraphArrow> arrows = new ArrayList<>(arrowObjects.size());
@@ -247,6 +276,19 @@ public final class GraphJsonCodec {
         return flag;
     }
 
+    /** A string field that may be absent, in which case it is empty. */
+    private static String optionalString(Map<String, Object> fields, String key, String owner) {
+        Object value = fields.get(key);
+        if (value == null) {
+            return "";
+        }
+        if (!(value instanceof String text)) {
+            throw new IllegalArgumentException(
+                    "Expected a string for \"" + key + "\" in " + owner + " entry, got " + value);
+        }
+        return text;
+    }
+
     /**
      * An id field, which must be a whole positive number since ids are allocated
      * sequentially from 1.
@@ -264,7 +306,7 @@ public final class GraphJsonCodec {
 
     /**
      * Cursor over the JSON text. Supports exactly the subset this format uses —
-     * objects, arrays, unescaped string keys, numbers and booleans — and reports the
+     * objects, arrays, strings (with the standard escapes), numbers and booleans — and reports the
      * offset of whatever it could not read.
      */
     private static final class JsonScanner {
@@ -300,27 +342,57 @@ public final class GraphJsonCodec {
 
         String readString() {
             expect('"');
-            int start = index;
+            StringBuilder value = new StringBuilder();
             while (index < source.length() && source.charAt(index) != '"') {
-                if (source.charAt(index) == '\\') {
-                    throw error("string escape sequences are not supported");
+                char c = source.charAt(index++);
+                if (c != '\\') {
+                    value.append(c);
+                    continue;
                 }
-                index++;
+                if (index >= source.length()) {
+                    break;
+                }
+                char escaped = source.charAt(index++);
+                switch (escaped) {
+                    case '"', '\\', '/' -> value.append(escaped);
+                    case 'n' -> value.append('\n');
+                    case 'r' -> value.append('\r');
+                    case 't' -> value.append('\t');
+                    case 'b' -> value.append('\b');
+                    case 'f' -> value.append('\f');
+                    case 'u' -> value.append(readUnicodeEscape());
+                    default -> throw error("unknown string escape \\" + escaped);
+                }
             }
             if (index >= source.length()) {
                 throw error("unterminated string");
             }
-            String value = source.substring(start, index);
             index++;
-            return value;
+            return value.toString();
+        }
+
+        private char readUnicodeEscape() {
+            if (index + 4 > source.length()) {
+                throw error("truncated \\u escape");
+            }
+            try {
+                char c = (char) Integer.parseInt(source.substring(index, index + 4), 16);
+                index += 4;
+                return c;
+            } catch (NumberFormatException e) {
+                throw error("malformed \\u escape");
+            }
         }
 
         /**
-         * A single scalar: {@code true}/{@code false} yield a Boolean, anything else is
-         * read as a number.
+         * A single scalar: a string yields a String, {@code true}/{@code false} a Boolean,
+         * anything else is read as a number.
          */
         Object readValue() {
             skipWhitespace();
+            if (index < source.length() && source.charAt(index) == '"') {
+                return readString();
+            }
             if (tryConsumeLiteral("true")) {
                 return Boolean.TRUE;
             }
