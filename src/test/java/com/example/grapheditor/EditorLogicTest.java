@@ -551,4 +551,42 @@ public class EditorLogicTest {
         assertArrayEquals(new double[]{100, 100}, motion.effectivePosition(node), 1e-6,
                 "offset decays to zero once the node is gone");
     }
+
+    @Test
+    @DisplayName("Hints: each editor state maps to its own short instruction, drag taking priority")
+    void testHintSelection() {
+        assertEquals(EditorHints.IDLE, EditorHints.hintFor(false, false, 0));
+        assertEquals(EditorHints.NODE_SELECTED, EditorHints.hintFor(false, true, 0));
+        assertEquals(EditorHints.MULTI_SELECTED, EditorHints.hintFor(false, false, 2));
+        assertEquals(EditorHints.NODE_SELECTED, EditorHints.hintFor(false, true, 2),
+                "orange selection is the one right-click acts on");
+        assertEquals(EditorHints.CONNECTING, EditorHints.hintFor(true, true, 1));
+        for (String hint : new String[]{EditorHints.IDLE, EditorHints.NODE_SELECTED,
+                EditorHints.MULTI_SELECTED, EditorHints.CONNECTING}) {
+            assertTrue(hint.length() <= 80, "hint must fit the toolbar: " + hint);
+        }
+    }
+
+    @Test
+    @DisplayName("Auto-connect: selection cleared after creation returns the hint to idle; command is atomic")
+    void testAutoConnectClearsSelectionState() {
+        GraphModel model = new GraphModel();
+        GraphNode source = new GraphNode(model.allocateNodeId(), 100, 100);
+        model.addNode(source);
+        Long selected = source.id();
+        assertEquals(EditorHints.NODE_SELECTED, EditorHints.hintFor(false, selected != null, 0));
+
+        GraphNode created = new GraphNode(model.allocateNodeId(), 250, 100);
+        GraphArrow arrow = new GraphArrow(model.allocateArrowId(), source.id(), created.id());
+        selected = null; // the controller clears selection before rendering
+        AddConnectedNodeCommand command = new AddConnectedNodeCommand(created, arrow);
+        command.apply(model);
+
+        assertEquals(EditorHints.IDLE, EditorHints.hintFor(false, selected != null, 0));
+        assertEquals(2, model.getNodes().size());
+        assertEquals(1, model.getArrows().size());
+        command.undo(model);
+        assertEquals(1, model.getNodes().size());
+        assertTrue(model.getArrows().isEmpty());
+    }
 }
