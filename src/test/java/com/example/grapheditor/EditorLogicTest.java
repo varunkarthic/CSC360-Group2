@@ -654,4 +654,132 @@ public class EditorLogicTest {
         assertEquals(EditorHints.NODES_SELECTED, EditorHints.hintFor(false, 2, 1));
         assertEquals(EditorHints.CONNECTING, EditorHints.hintFor(true, 2, 0));
     }
+
+    // -----------------------------------------------------------------
+    // Issue #14: Editable text labels on nodes
+    // -----------------------------------------------------------------
+
+    @Test
+    @DisplayName("Issue #14: Nodes default to an empty label and keep it through move and rename copies")
+    void testNodeLabelBasics() {
+        assertEquals("", new GraphNode(1, 10, 20).label());
+        assertEquals("", new GraphNode(1, 10, 20, null).label(), "null normalised to empty");
+        GraphNode labelled = new GraphNode(1, 10, 20, "Start");
+        GraphNode moved = labelled.withPosition(50, 60);
+        assertEquals("Start", moved.label(), "moving must not discard the label");
+        assertEquals(50.0, moved.x());
+        assertEquals(20.0, labelled.withLabel("End").y());
+        assertEquals("Start", labelled.label(), "records are immutable");
+    }
+
+    @Test
+    @DisplayName("Issue #14: RenameNodeCommand apply/undo round-trip restores the previous label")
+    void testRenameNodeCommandRoundTrip() {
+        GraphModel model = new GraphModel();
+        GraphNode node = new GraphNode(model.allocateNodeId(), 100, 100, "Old");
+        model.addNode(node);
+
+        RenameNodeCommand rename = new RenameNodeCommand(node, "Login");
+        rename.apply(model);
+        assertEquals("Login", model.findNode(node.id()).label());
+        assertEquals(100.0, model.findNode(node.id()).x());
+        assertEquals(1, model.getNodes().size(), "rename overwrites by id, never duplicates");
+
+        rename.undo(model);
+        assertEquals("Old", model.findNode(node.id()).label());
+        rename.apply(model);
+        assertEquals("Login", model.findNode(node.id()).label(), "redo");
+    }
+
+    @Test
+    @DisplayName("Issue #14: Renaming works through the undo/redo stacks and clears to unlabeled")
+    void testRenameThroughHistory() {
+        GraphModel model = new GraphModel();
+        GraphNode node = new GraphNode(model.allocateNodeId(), 5, 5);
+        model.addNode(node);
+        LinkedStack<EditCommand> undo = new LinkedStack<>();
+        EditCommand named = new RenameNodeCommand(node, "A");
+        named.apply(model);
+        undo.push(named);
+        EditCommand cleared = new RenameNodeCommand(model.findNode(node.id()), "");
+        cleared.apply(model);
+        undo.push(cleared);
+
+        assertEquals("", model.findNode(node.id()).label());
+        undo.pop().undo(model);
+        assertEquals("A", model.findNode(node.id()).label());
+        undo.pop().undo(model);
+        assertEquals("", model.findNode(node.id()).label());
+    }
+
+    @Test
+    @DisplayName("Issue #14: Moving, deleting and restoring a node keeps its label")
+    void testLabelSurvivesMoveAndDelete() {
+        GraphModel model = new GraphModel();
+        GraphNode node = new GraphNode(model.allocateNodeId(), 100, 100, "Payment failed");
+        model.addNode(node);
+
+        MoveNodesCommand move = new MoveNodesCommand(List.of(node), 30, 40);
+        move.apply(model);
+        assertEquals("Payment failed", model.findNode(node.id()).label());
+        move.undo(model);
+        assertEquals("Payment failed", model.findNode(node.id()).label());
+
+        DeleteNodeCommand delete = new DeleteNodeCommand(node, model.incidentArrows(node.id()));
+        delete.apply(model);
+        assertNull(model.findNode(node.id()));
+        delete.undo(model);
+        assertEquals("Payment failed", model.findNode(node.id()).label());
+    }
+
+    @Test
+    @DisplayName("Issue #14: Labels survive a JSON round-trip, including quotes, backslashes and unicode")
+    void testLabelJsonRoundTrip() {
+        GraphModel model = new GraphModel();
+        String tricky = "Say \"hi\" \\ back\nline\ttab \u00e9\u4e2d";
+        model.addNode(new GraphNode(model.allocateNodeId(), 1, 2, "Start"));
+        model.addNode(new GraphNode(model.allocateNodeId(), 3, 4));
+        model.addNode(new GraphNode(model.allocateNodeId(), 5, 6, tricky));
+
+        String json = GraphJsonCodec.toJson(model);
+        GraphModel loaded = GraphJsonCodec.fromJson(json);
+
+        assertEquals("Start", loaded.findNode(1).label());
+        assertEquals("", loaded.findNode(2).label());
+        assertEquals(tricky, loaded.findNode(3).label());
+        assertFalse(json.contains("\"label\": \"\""), "empty labels are not written");
+        assertEquals(json, GraphJsonCodec.toJson(loaded), "stable second round-trip");
+    }
+
+    @Test
+    @DisplayName("Issue #14: Files written before labels existed still load; bad label types are rejected")
+    void testLabelJsonCompatibilityAndValidation() {
+        GraphModel legacy = GraphJsonCodec.fromJson(
+                "{\"nodes\": [{\"id\": 1, \"x\": 0, \"y\": 0}], \"arrows\": []}");
+        assertEquals("", legacy.findNode(1).label());
+
+        GraphModel unicode = GraphJsonCodec.fromJson(
+                "{\"nodes\": [{\"id\": 1, \"x\": 0, \"y\": 0, \"label\": \"\\u0041\\/\"}], \"arrows\": []}");
+        assertEquals("A/", unicode.findNode(1).label());
+
+        assertThrows(IllegalArgumentException.class, () -> GraphJsonCodec.fromJson(
+                "{\"nodes\": [{\"id\": 1, \"x\": 0, \"y\": 0, \"label\": 5}], \"arrows\": []}"),
+                "numeric label");
+        assertThrows(IllegalArgumentException.class, () -> GraphJsonCodec.fromJson(
+                "{\"nodes\": [{\"id\": 1, \"x\": 0, \"y\": 0, \"label\": \"a\\qb\"}], \"arrows\": []}"),
+                "unknown escape");
+        assertThrows(IllegalArgumentException.class, () -> GraphJsonCodec.fromJson(
+                "{\"nodes\": [{\"id\": 1, \"x\": 0, \"y\": 0, \"label\": \"abc}], \"arrows\": []}"),
+                "unterminated label");
+        assertThrows(IllegalArgumentException.class, () -> GraphJsonCodec.fromJson(
+                "{\"nodes\": [{\"id\": 1, \"x\": 0, \"y\": 0, \"label\": \"\\u12\"}], \"arrows\": []}"),
+                "truncated unicode escape");
+    }
+
+    @Test
+    @DisplayName("Issue #14: Idle hint mentions double-click labelling and fits the toolbar")
+    void testIdleHintMentionsLabel() {
+        assertTrue(EditorHints.IDLE.contains("Double-click"));
+        assertTrue(EditorHints.IDLE.length() <= 80);
+    }
 }
