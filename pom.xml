@@ -13,7 +13,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <javafx.version>23.0.2</javafx.version>
         <junit.version>5.11.4</junit.version>
-        <main.class>com.example.grapheditor.EditorApplication</main.class>
+        <main.class>com.example.grapheditor.Main</main.class>
     </properties>
 
     <dependencyManagement>

@@ -36,17 +36,6 @@ graph saves to a plain JSON file or exports to PNG/SVG.
 
 > **Next read:** [technical_details.md](technical_details.md) covers the packages used, architecture, algorithms, file format and limitations in depth.
 
-## Team
-
-**CSC360 · Computer Graphics and Digital Image Processing · Monsoon 2026 · Group 2**
-
-| No. | Name | Enrolment No. |
-|:---:|:---|:---|
-| 1 | Varun | AU2520215 |
-| 2 | Satvik | AU2520039 |
-| 3 | Garv | AU2520247 |
-| 4 | Shambhavee | AU2500016 |
-
 ## Demo
 
 <p align="center">
