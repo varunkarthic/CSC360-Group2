@@ -39,14 +39,10 @@ graph saves to a plain JSON file or exports to PNG/SVG.
 ## Demo
 
 <p align="center">
-  <img src="media/editor_screenshot.png" alt="Graph Editor Interface Screenshot" width="100%">
+  <img src="media/demo.gif" alt="Graph Editor Demo" width="100%">
 </p>
 
-<p align="center">
-  <video src="https://github.com/varunkarthic/CSC360-Group2/raw/master/media/demo_video_1.mp4" controls muted width="100%"></video>
-</p>
-
-<p align="center"><sub>Video not playing? <a href="media/demo_video_1.mp4">Open the demo file</a>.</sub></p>
+<p align="center"><sub>Prefer high-resolution video? <a href="media/demo_video_1.mp4">Open the demo video</a>.</sub></p>
 
 ## Quick start
 
@@ -142,6 +138,7 @@ CSC360-Group2/
 ├── mvnw, mvnw.cmd           Maven wrapper
 ├── technical_details.md     In-depth technical documentation
 ├── test.json                Sample graph to try Load
+├── media/demo.gif           Animated demo recording
 ├── media/demo_video_1.mp4   Demo recording
 └── src/
     ├── main/java/com/example/grapheditor/
