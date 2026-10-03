@@ -2,11 +2,7 @@ package com.example.grapheditor;
 
 import java.util.List;
 
-/**
- * Creates a new node together with the automatic arrows from every previously
- * selected node (right-click on free space while nodes are selected), as one
- * undo step.
- */
+// Adds a node and the arrows to it from the selected nodes as one undo step.
 public class AddConnectedNodeCommand implements EditCommand {
 
     private final GraphNode node;

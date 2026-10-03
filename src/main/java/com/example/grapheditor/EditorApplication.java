@@ -41,17 +41,6 @@ import java.util.List;
 import java.util.Set;
 import javax.imageio.ImageIO;
 
-/**
- * JavaFX node/arrow graph editor.
- *
- * Right-click creates a node, or selects/deselects an existing one; creating a
- * node while another is selected connects them automatically. A primary-button
- * drag between two nodes creates a directed arrow, with a dashed preview line
- * following the cursor and the nearest candidate target easing toward it. A
- * stationary primary click deletes the node or arrow under the pointer. Every
- * edit is undoable/redoable through two linked-list history stacks, and a graph
- * can be saved to and reloaded from a JSON file.
- */
 public class EditorApplication extends Application {
 
     public static final double CANVAS_WIDTH = 800.0;
@@ -76,8 +65,7 @@ public class EditorApplication extends Application {
 
     private static final Color LABEL_COLOR = Color.WHITE;
     private static final Font LABEL_FONT = Font.font(11.0);
-    // A stationary click on a node deletes it, but only once this long has passed
-    // without a second click, since a double-click renames the node instead.
+    // Wait this long before deleting a clicked node, in case it is a double-click (rename).
     private static final double DOUBLE_CLICK_DELAY_MS = 300.0;
 
     private static final double PREVIEW_DASH_LENGTH = 8.0;
@@ -90,22 +78,22 @@ public class EditorApplication extends Application {
     private final LinkedStack<EditCommand> undoStack = new LinkedStack<>();
     private final LinkedStack<EditCommand> redoStack = new LinkedStack<>();
 
-    // Orange auto-connect selection: every member gets an arrow to the next node created.
+    // Orange selection: each of these nodes gets an arrow to the next node created.
     private final SelectionState selection = new SelectionState();
     private final Set<Long> multiSelectedNodeIds = new HashSet<>();
 
-    // Primary-button gesture tracking (press -> drag? -> release classification).
+    // State of the current left-button press.
     private boolean primaryGestureActive;
     private double pressX;
     private double pressY;
-    private Long pressHitNodeId;
-    private double maxMovementSquared;
+    private Long pressedNodeId;
+    private double maxDragDistanceSquared;
 
-    // Drag-connect feedback: last cursor position plus the cosmetic pull offsets.
+    // Cursor position while dragging, and the pull animation.
     private double dragCursorX;
     private double dragCursorY;
-    private final PullMotionModel pullMotion = new PullMotionModel();
-    private AnimationTimer motionTimer;
+    private final NodePullAnimation pullAnimation = new NodePullAnimation();
+    private AnimationTimer animationTimer;
 
     private PauseTransition pendingDelete;
 
@@ -170,10 +158,6 @@ public class EditorApplication extends Application {
         render();
     }
 
-    // -----------------------------------------------------------------
-    // Mouse gesture handling
-    // -----------------------------------------------------------------
-
     private void handleMousePressed(MouseEvent event) {
         double x = event.getX();
         double y = event.getY();
@@ -188,8 +172,7 @@ public class EditorApplication extends Application {
         if (event.getButton() == MouseButton.PRIMARY && event.getClickCount() == 2) {
             GraphNode labelTarget = model.hitNodeBody(x, y, NODE_RADIUS);
             if (labelTarget != null) {
-                // Second click of a double-click: rename instead of the delete the
-                // first click had scheduled, and skip the normal press/drag gesture.
+                // Double-click: rename, and cancel the delete the first click scheduled.
                 cancelPendingDelete();
                 editLabel(labelTarget);
                 return;
@@ -201,13 +184,12 @@ public class EditorApplication extends Application {
             primaryGestureActive = true;
             pressX = x;
             pressY = y;
-            // Seed the cursor at the press point so the first render of this gesture
-            // cannot preview a line toward a stale position from an earlier drag.
+            // Start the cursor at the press point so no old preview line is drawn.
             dragCursorX = x;
             dragCursorY = y;
             GraphNode hit = model.hitNodeBody(x, y, NODE_RADIUS);
-            pressHitNodeId = hit == null ? null : hit.id();
-            maxMovementSquared = 0.0;
+            pressedNodeId = hit == null ? null : hit.id();
+            maxDragDistanceSquared = 0.0;
             render();
         }
     }
@@ -218,19 +200,18 @@ public class EditorApplication extends Application {
         }
         double x = event.getX();
         double y = event.getY();
-        maxMovementSquared = Math.max(maxMovementSquared,
+        maxDragDistanceSquared = Math.max(maxDragDistanceSquared,
                 GeometryUtils.distanceSquared(pressX, pressY, x, y));
 
-        if (pressHitNodeId == null) {
-            // Not a connect-drag, so there is no preview line or target to tug.
+        if (pressedNodeId == null) {
             return;
         }
         dragCursorX = x;
         dragCursorY = y;
         GraphNode candidate = model.nearestNodeWithin(
-                x, y, PullMotionModel.PULL_RADIUS, pressHitNodeId);
-        pullMotion.setPulledNodeId(candidate == null ? null : candidate.id());
-        startMotionTimer();
+                x, y, NodePullAnimation.PULL_RADIUS, pressedNodeId);
+        pullAnimation.setPulledNodeId(candidate == null ? null : candidate.id());
+        startAnimationTimer();
     }
 
     private void handleMouseReleased(MouseEvent event) {
@@ -241,46 +222,45 @@ public class EditorApplication extends Application {
 
         double x = event.getX();
         double y = event.getY();
-        maxMovementSquared = Math.max(maxMovementSquared,
+        maxDragDistanceSquared = Math.max(maxDragDistanceSquared,
                 GeometryUtils.distanceSquared(pressX, pressY, x, y));
 
-        boolean dragged = maxMovementSquared > DRAG_THRESHOLD * DRAG_THRESHOLD;
+        boolean dragged = maxDragDistanceSquared > DRAG_THRESHOLD * DRAG_THRESHOLD;
         if (dragged) {
             completeDrag(x, y);
         } else {
             completeClick(x, y, event.isShiftDown());
         }
-        pressHitNodeId = null;
-        // Releasing the pull lets the offset ease back to zero on following frames.
-        pullMotion.setPulledNodeId(null);
+        pressedNodeId = null;
+        pullAnimation.setPulledNodeId(null);
     }
 
     private void completeDrag(double releaseX, double releaseY) {
-        if (pressHitNodeId == null) {
+        if (pressedNodeId == null) {
             return;
         }
         GraphNode target = resolveConnectTarget(releaseX, releaseY);
-        if (target != null && target.id() != pressHitNodeId) {
-            // Drag to another node -> connect or upgrade to bidirectional
-            if (model.arrowExists(pressHitNodeId, target.id())) {
+        if (target != null && target.id() != pressedNodeId) {
+            // Dragged onto another node: connect, or make an existing arrow two-way.
+            if (model.arrowExists(pressedNodeId, target.id())) {
                 return;
             }
-            GraphArrow reverse = model.findArrow(target.id(), pressHitNodeId);
+            GraphArrow reverse = model.findArrow(target.id(), pressedNodeId);
             if (reverse != null) {
                 if (!reverse.bidirectional()) {
                     execute(new UpgradeArrowCommand(reverse));
                 }
                 return;
             }
-            GraphArrow arrow = new GraphArrow(model.allocateArrowId(), pressHitNodeId, target.id());
+            GraphArrow arrow = new GraphArrow(model.allocateArrowId(), pressedNodeId, target.id());
             execute(new AddArrowCommand(arrow));
         } else if (target == null) {
-            // Drag to empty canvas -> move
+            // Dragged onto empty space: move the node(s).
             double dx = releaseX - pressX;
             double dy = releaseY - pressY;
             if (Math.abs(dx) > GEOMETRY_EPSILON || Math.abs(dy) > GEOMETRY_EPSILON) {
                 List<GraphNode> nodesToMove = new ArrayList<>();
-                if (multiSelectedNodeIds.contains(pressHitNodeId)) {
+                if (multiSelectedNodeIds.contains(pressedNodeId)) {
                     for (Long id : multiSelectedNodeIds) {
                         GraphNode node = model.findNode(id);
                         if (node != null) {
@@ -288,7 +268,7 @@ public class EditorApplication extends Application {
                         }
                     }
                 } else {
-                    GraphNode pressedNode = model.findNode(pressHitNodeId);
+                    GraphNode pressedNode = model.findNode(pressedNodeId);
                     if (pressedNode != null) {
                         nodesToMove.add(pressedNode);
                     }
@@ -300,25 +280,19 @@ public class EditorApplication extends Application {
         }
     }
 
-    /**
-     * The node a drag release should connect to. Falls back from the precise
-     * node-body hit test to the same {@link PullMotionModel#PULL_RADIUS} used for
-     * the visual pull feedback, so a release that looked like a successful connect
-     * (the target was visibly tugged toward the cursor) actually completes as one
-     * instead of silently being reinterpreted as a move of the pressed node(s).
-     */
+    // A release near a node (inside the pull radius) still connects to it, so it matches what the animation showed.
     private GraphNode resolveConnectTarget(double releaseX, double releaseY) {
         GraphNode hit = model.hitNodeBody(releaseX, releaseY, NODE_RADIUS);
         if (hit != null) {
             return hit;
         }
-        return model.nearestNodeWithin(releaseX, releaseY, PullMotionModel.PULL_RADIUS, pressHitNodeId);
+        return model.nearestNodeWithin(releaseX, releaseY, NodePullAnimation.PULL_RADIUS, pressedNodeId);
     }
 
     private void completeClick(double x, double y, boolean isShiftDown) {
         GraphNode releaseNode = model.hitNodeBody(x, y, NODE_RADIUS);
         if (releaseNode != null) {
-            if (pressHitNodeId != null && releaseNode.id() == pressHitNodeId) {
+            if (pressedNodeId != null && releaseNode.id() == pressedNodeId) {
                 if (isShiftDown) {
                     if (multiSelectedNodeIds.contains(releaseNode.id())) {
                         multiSelectedNodeIds.remove(releaseNode.id());
@@ -333,8 +307,7 @@ public class EditorApplication extends Application {
             return;
         }
 
-        if (pressHitNodeId != null) {
-            // Press started on a node but released on empty space/arrow: no edit.
+        if (pressedNodeId != null) {
             return;
         }
 
@@ -382,7 +355,7 @@ public class EditorApplication extends Application {
 
     private void handleSecondaryClick(double x, double y, boolean additive) {
         GraphNode hit = model.hitNodeBody(x, y, NODE_RADIUS);
-        GraphNode target = hit != null ? hit : model.nearestConflictingNode(x, y, NODE_RADIUS, GEOMETRY_EPSILON);
+        GraphNode target = hit != null ? hit : model.nearestOverlappingNode(x, y, NODE_RADIUS, GEOMETRY_EPSILON);
 
         if (target != null) {
             if (additive) {
@@ -405,8 +378,7 @@ public class EditorApplication extends Application {
             for (Long sourceId : selection.ids()) {
                 arrows.add(new GraphArrow(model.allocateArrowId(), sourceId, newNode.id()));
             }
-            // Clear the selection before execute(), which renders: otherwise the orange
-            // rings linger on the sources until some later repaint.
+            // Clear first, because execute() redraws the canvas.
             selection.clear();
             execute(new AddConnectedNodeCommand(newNode, arrows));
         } else {
@@ -419,55 +391,44 @@ public class EditorApplication extends Application {
         selection.clear();
         multiSelectedNodeIds.clear();
         primaryGestureActive = false;
-        pressHitNodeId = null;
-        pullMotion.setPulledNodeId(null);
+        pressedNodeId = null;
+        pullAnimation.setPulledNodeId(null);
         render();
     }
 
-    // -----------------------------------------------------------------
-    // Drag-pull animation driver
-    // -----------------------------------------------------------------
-
-    /**
-     * True while a primary drag that started on a node is in progress, which is
-     * exactly when the preview line and pull feedback are shown.
-     */
+    // True while dragging from a node, which is when the preview line is shown.
     private boolean connectDragActive() {
-        return primaryGestureActive && pressHitNodeId != null;
+        return primaryGestureActive && pressedNodeId != null;
     }
 
-    private void startMotionTimer() {
-        if (motionTimer != null) {
+    private void startAnimationTimer() {
+        if (animationTimer != null) {
             return;
         }
-        motionTimer = new AnimationTimer() {
+        animationTimer = new AnimationTimer() {
             @Override
             public void handle(long now) {
-                onMotionFrame();
+                onAnimationFrame();
             }
         };
-        motionTimer.start();
+        animationTimer.start();
     }
 
-    private void stopMotionTimer() {
-        if (motionTimer == null) {
+    private void stopAnimationTimer() {
+        if (animationTimer == null) {
             return;
         }
-        motionTimer.stop();
-        motionTimer = null;
+        animationTimer.stop();
+        animationTimer = null;
     }
 
-    private void onMotionFrame() {
-        pullMotion.tick(model, dragCursorX, dragCursorY);
+    private void onAnimationFrame() {
+        pullAnimation.tick(model, dragCursorX, dragCursorY);
         render();
-        if (pullMotion.isAtRest() && !connectDragActive()) {
-            stopMotionTimer();
+        if (pullAnimation.isAtRest() && !connectDragActive()) {
+            stopAnimationTimer();
         }
     }
-
-    // -----------------------------------------------------------------
-    // History
-    // -----------------------------------------------------------------
 
     private void execute(EditCommand command) {
         command.apply(model);
@@ -497,10 +458,6 @@ public class EditorApplication extends Application {
         undoStack.push(command);
         render();
     }
-
-    // -----------------------------------------------------------------
-    // Persistence
-    // -----------------------------------------------------------------
 
     private void saveGraph() {
         File file = chooseGraphFile(true);
@@ -533,13 +490,12 @@ public class EditorApplication extends Application {
 
         cancelPendingDelete();
         model.loadFrom(loaded.getNodes(), loaded.getArrows());
-        // A loaded graph has no meaningful history back to the previous in-memory graph.
         undoStack.clear();
         redoStack.clear();
         selection.clear();
         primaryGestureActive = false;
-        pressHitNodeId = null;
-        pullMotion.reset();
+        pressedNodeId = null;
+        pullAnimation.reset();
         render();
     }
 
@@ -605,10 +561,6 @@ public class EditorApplication extends Application {
         alert.showAndWait();
     }
 
-    // -----------------------------------------------------------------
-    // Hit testing (shares geometry with rendering, see GeometryUtils)
-    // -----------------------------------------------------------------
-
     private GraphArrow hitArrowAt(double x, double y) {
         GraphArrow best = null;
         double bestDistance = Double.MAX_VALUE;
@@ -618,8 +570,10 @@ public class EditorApplication extends Application {
             if (source == null || target == null) {
                 continue;
             }
-            double[] segment = GeometryUtils.trimmedSegment(source.x(), source.y(), target.x(), target.y(), NODE_RADIUS);
-            double distance = GeometryUtils.pointToSegmentDistance(x, y, segment[0], segment[1], segment[2], segment[3]);
+            GeometryUtils.ArrowLine line = GeometryUtils.trimmedArrowLine(
+                    source.x(), source.y(), target.x(), target.y(), NODE_RADIUS);
+            double distance = GeometryUtils.pointToSegmentDistance(
+                    x, y, line.startX(), line.startY(), line.endX(), line.endY());
             if (distance <= ARROW_HIT_TOLERANCE && distance < bestDistance) {
                 best = arrow;
                 bestDistance = distance;
@@ -628,15 +582,7 @@ public class EditorApplication extends Application {
         return best;
     }
 
-    // -----------------------------------------------------------------
-    // Rendering
-    // -----------------------------------------------------------------
-
-    /**
-     * Draws from {@link PullMotionModel#effectivePosition} rather than raw model
-     * coordinates, so a node being tugged and the arrows attached to it move together.
-     * Hit testing deliberately stays on the real coordinates.
-     */
+    // Draws use effectivePosition so a pulled node and its arrows move together. Hit tests use real positions.
     private void render() {
         if (hintLabel != null) {
             hintLabel.setText(EditorHints.hintFor(
@@ -655,18 +601,17 @@ public class EditorApplication extends Application {
     }
 
     private void drawDragPreview() {
-        GraphNode source = model.findNode(pressHitNodeId);
+        GraphNode source = model.findNode(pressedNodeId);
         if (source == null) {
             return;
         }
-        double[] origin = pullMotion.effectivePosition(source);
+        double[] origin = pullAnimation.effectivePosition(source);
         if (GeometryUtils.distanceSquared(origin[0], origin[1], dragCursorX, dragCursorY)
                 <= NODE_RADIUS * NODE_RADIUS) {
-            // Cursor still inside the source node: nothing meaningful to preview yet.
             return;
         }
 
-        double angle = GeometryUtils.calculateAngle(origin[0], origin[1], dragCursorX, dragCursorY);
+        double angle = GeometryUtils.angleBetweenPoints(origin[0], origin[1], dragCursorX, dragCursorY);
         double startX = origin[0] + NODE_RADIUS * Math.cos(angle);
         double startY = origin[1] + NODE_RADIUS * Math.sin(angle);
 
@@ -674,7 +619,7 @@ public class EditorApplication extends Application {
         gc.setLineWidth(2.0);
         gc.setLineDashes(PREVIEW_DASH_LENGTH, PREVIEW_DASH_GAP);
         gc.strokeLine(startX, startY, dragCursorX, dragCursorY);
-        // Restore solid strokes for the nodes and arrows drawn after this.
+        // Back to solid lines for the nodes and arrows drawn after this.
         gc.setLineDashes();
     }
 
@@ -684,7 +629,7 @@ public class EditorApplication extends Application {
     }
 
     private void drawNode(GraphNode node) {
-        double[] center = pullMotion.effectivePosition(node);
+        double[] center = pullAnimation.effectivePosition(node);
         double diameter = NODE_RADIUS * 2;
         double topLeftX = center[0] - NODE_RADIUS;
         double topLeftY = center[1] - NODE_RADIUS;
@@ -713,7 +658,6 @@ public class EditorApplication extends Application {
         }
     }
 
-    /** Centered on the node's effective (possibly pulled) position, like the circle itself. */
     private void drawLabel(GraphNode node, double[] center) {
         if (node.label().isEmpty()) {
             return;
@@ -732,15 +676,15 @@ public class EditorApplication extends Application {
             return;
         }
 
-        double[] sourceCenter = pullMotion.effectivePosition(source);
-        double[] targetCenter = pullMotion.effectivePosition(target);
-        double[] segment = GeometryUtils.trimmedSegment(
+        double[] sourceCenter = pullAnimation.effectivePosition(source);
+        double[] targetCenter = pullAnimation.effectivePosition(target);
+        GeometryUtils.ArrowLine line = GeometryUtils.trimmedArrowLine(
                 sourceCenter[0], sourceCenter[1], targetCenter[0], targetCenter[1], NODE_RADIUS);
-        double startX = segment[0];
-        double startY = segment[1];
-        double tipX = segment[2];
-        double tipY = segment[3];
-        double angle = segment[4];
+        double startX = line.startX();
+        double startY = line.startY();
+        double tipX = line.endX();
+        double tipY = line.endY();
+        double angle = line.angle();
 
         gc.setStroke(CONNECTOR_COLOR);
         gc.setLineWidth(2.5);

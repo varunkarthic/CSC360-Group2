@@ -3,14 +3,7 @@ package com.example.grapheditor;
 import java.util.Locale;
 import java.util.Objects;
 
-/**
- * Pure-function vector exporter that renders a {@link GraphModel} as a scalable
- * vector graphics (SVG) document.
- *
- * <p>Walks the model directly and mirrors the visual geometry used on the canvas
- * ({@link GeometryUtils#trimmedSegment}, arrowhead angles, node radius, and colors)
- * without depending on JavaFX, making it fast and unit-testable.</p>
- */
+// Draws the graph as an SVG string, matching the canvas drawing without using JavaFX.
 public final class GraphSvgExporter {
 
     public static final double CANVAS_WIDTH = 800.0;
@@ -30,13 +23,6 @@ public final class GraphSvgExporter {
     private GraphSvgExporter() {
     }
 
-    /**
-     * Converts the given graph model to an SVG document string.
-     *
-     * @param model the graph model to export
-     * @return the complete SVG document
-     * @throws NullPointerException if model is null
-     */
     public static String toSvg(GraphModel model) {
         Objects.requireNonNull(model, "model");
 
@@ -49,13 +35,13 @@ public final class GraphSvgExporter {
                 continue;
             }
 
-            double[] segment = GeometryUtils.trimmedSegment(
+            GeometryUtils.ArrowLine line = GeometryUtils.trimmedArrowLine(
                     source.x(), source.y(), target.x(), target.y(), NODE_RADIUS);
-            double startX = segment[0];
-            double startY = segment[1];
-            double tipX = segment[2];
-            double tipY = segment[3];
-            double angle = segment[4];
+            double startX = line.startX();
+            double startY = line.startY();
+            double tipX = line.endX();
+            double tipY = line.endY();
+            double angle = line.angle();
 
             svg.append("  <line x1=\"").append(format(startX))
                .append("\" y1=\"").append(format(startY))

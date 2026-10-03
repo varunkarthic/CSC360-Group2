@@ -3,9 +3,7 @@ package com.example.grapheditor;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 
-/**
- * Generic singly linked LIFO stack, used for the undo and redo history.
- */
+// Linked-list stack used for the undo and redo history.
 public final class LinkedStack<T> {
 
     private static final class Entry<T> {

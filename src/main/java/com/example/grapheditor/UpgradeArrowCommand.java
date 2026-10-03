@@ -1,8 +1,6 @@
 package com.example.grapheditor;
 
-/**
- * Upgrades an existing one-way arrow to a bidirectional arrow (swaps arrow record with bidirectional = true).
- */
+// Turns a one-way arrow into a two-way arrow.
 public class UpgradeArrowCommand implements EditCommand {
 
     private final GraphArrow before;
@@ -11,14 +9,6 @@ public class UpgradeArrowCommand implements EditCommand {
     public UpgradeArrowCommand(GraphArrow before) {
         this.before = before;
         this.after = new GraphArrow(before.id(), before.sourceId(), before.targetId(), true);
-    }
-
-    public GraphArrow getBefore() {
-        return before;
-    }
-
-    public GraphArrow getAfter() {
-        return after;
     }
 
     @Override

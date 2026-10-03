@@ -5,16 +5,12 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
-/**
- * The orange auto-connect selection: the nodes that will each get an arrow to
- * the next node created by a right-click on free space. Plain JavaFX-free
- * logic so the toggle rules are unit-testable.
- */
+// Nodes selected for auto-connect: each gets an arrow to the next node created by right-click.
 public final class SelectionState {
 
     private final Set<Long> ids = new LinkedHashSet<>();
 
-    /** Plain right-click: select only this node, or deselect it if it is the sole selection. */
+    // Right-click: select only this node, or deselect it if it is the only one selected.
     public void toggleSingle(long id) {
         boolean onlySelected = ids.size() == 1 && ids.contains(id);
         ids.clear();
@@ -23,7 +19,7 @@ public final class SelectionState {
         }
     }
 
-    /** Shift + right-click: add the node to the selection, or remove it if already in it. */
+    // Shift + right-click: add or remove this node.
     public void toggleAdditive(long id) {
         if (!ids.remove(id)) {
             ids.add(id);
@@ -42,7 +38,6 @@ public final class SelectionState {
         return ids.isEmpty();
     }
 
-    /** Selected ids in selection order. */
     public List<Long> ids() {
         return new ArrayList<>(ids);
     }

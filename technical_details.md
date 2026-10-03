@@ -124,9 +124,9 @@ Java language features used: **records** (`GraphNode`, `GraphArrow`), **pattern 
                         └──────┬──────┘
                                │ mutates
                                ▼
-   ┌────────────────┐   ┌─────────────┐   reads    ┌────────────────┐
-   │ GraphJsonCodec │◀─▶│ GraphModel  │◀───────────│ PullMotionModel│ (cosmetic only)
-   └────────────────┘   └──────┬──────┘            └────────────────┘
+   ┌────────────────┐   ┌─────────────┐   reads    ┌──────────────────┐
+   │ GraphJsonCodec │◀─▶│ GraphModel  │◀───────────│ NodePullAnimation│ (cosmetic only)
+   └────────────────┘   └──────┬──────┘            └──────────────────┘
                                │ uses
                         ┌──────▼──────┐
                         │GeometryUtils│  (pure static maths)
@@ -141,7 +141,7 @@ Java language features used: **records** (`GraphNode`, `GraphArrow`), **pattern 
 | Commands | `EditCommand` + 7 implementations | One reversible edit each |
 | Model | `GraphModel`, `GraphNode`, `GraphArrow` | Graph state and queries |
 | Utilities | `GeometryUtils`, `LinkedStack` | Maths and history storage |
-| Animation | `PullMotionModel` | Temporary visual offsets |
+| Animation | `NodePullAnimation` | Temporary visual offsets |
 | Persistence | `GraphJsonCodec` | JSON read and write |
 
 **Key rule:** the UI never mutates the model directly. Every change is a command run through `execute()`, so history stays correct.
@@ -183,7 +183,7 @@ record GraphArrow(long id, long sourceId, long targetId, boolean bidirectional)
 | `findArrow(src, tgt)`, `arrowExists(src, tgt)` | Directed-pair lookup |
 | `hitNodeBody(x, y, r)` | Node whose circle contains the point |
 | `nearestNodeWithin(x, y, r, excludedId)` | Closest node inside a radius, skipping one |
-| `nearestConflictingNode(x, y, r, eps)` | Closest node within `2r + eps` (placement conflict) |
+| `nearestOverlappingNode(x, y, r, eps)` | Closest node within `2r + eps` (placement conflict) |
 | `loadFrom(nodes, arrows)` | Replace everything; reset id counters to `max id + 1` |
 
 Distance checks compare **squared** distances, which avoids `sqrt`.
@@ -198,7 +198,7 @@ All gesture logic lives in `EditorApplication`. Handlers are attached to the can
 
 A **secondary gesture** is a right-click, or a left-click with `Ctrl` held (for trackpads). It is handled on *press*:
 
-1. Hit-test the point; if no node is hit, look for a node within `2 × radius` (`nearestConflictingNode`).
+1. Hit-test the point; if no node is hit, look for a node within `2 × radius` (`nearestOverlappingNode`).
 2. If a node was found: toggle it as the single selected node (`selectedNodeId`).
 3. Else, if the point is closer than one radius to the canvas edge: ignore.
 4. Else create a node with a new id:
@@ -302,8 +302,8 @@ All in `GeometryUtils` (pure static methods, shared by drawing **and** hit testi
 | Function | Formula / behaviour |
 |---|---|
 | `distanceSquared(x1,y1,x2,y2)` | `dx² + dy²` |
-| `calculateAngle(x1,y1,x2,y2)` | `atan2(y2 − y1, x2 − x1)`; correct in every quadrant |
-| `trimmedSegment(sx,sy,tx,ty,r)` | `θ = angle(s→t)`; start = `s + r·(cosθ, sinθ)`; end = `t − r·(cosθ, sinθ)`. Returns `{startX, startY, endX, endY, θ}` |
+| `angleBetweenPoints(x1,y1,x2,y2)` | `atan2(y2 − y1, x2 − x1)`; correct in every quadrant |
+| `trimmedArrowLine(sx,sy,tx,ty,r)` | `θ = angle(s→t)`; start = `s + r·(cosθ, sinθ)`; end = `t − r·(cosθ, sinθ)`. Returns an `ArrowLine(startX, startY, endX, endY, angle)` record |
 | `pointToSegmentDistance(p, a, b)` | Project `p` on line `ab`: `t = ((p−a)·(b−a)) / |b−a|²`, clamp `t` to [0, 1], distance to `a + t(b−a)`. A zero-length segment gives `t = 0` |
 | `lerp(a, b, t)` | `a + (b − a)·t` |
 | `clampMagnitude(dx, dy, max)` | Shortens the vector to `max` keeping its direction; unchanged if already shorter or zero |
@@ -337,7 +337,7 @@ Rendering is **immediate mode**: `render()` clears the whole canvas and redraws 
 | Arrowhead | Fill `#dc2626` |
 | Preview line | `#94a3b8`, 2 px, dashes 8 px on / 6 px off |
 
-Both nodes and arrows are drawn at `pullMotion.effectivePosition(node)`, so a tugged node and its arrows move together. The preview line starts on the source circle's edge and is skipped while the cursor is still inside the source node.
+Both nodes and arrows are drawn at `pullAnimation.effectivePosition(node)`, so a tugged node and its arrows move together. The preview line starts on the source circle's edge and is skipped while the cursor is still inside the source node.
 
 The window is 800 × 640 (canvas 800 × 600 plus a 40 px toolbar) and not resizable.
 
@@ -349,7 +349,7 @@ While dragging from a node, the nearest other node within **90 px** of the curso
 
 ### 10.1 Mechanism
 
-`PullMotionModel` keeps a `{dx, dy}` **offset** per node and one `pulledNodeId`. On every frame (`tick`):
+`NodePullAnimation` keeps a `{dx, dy}` **offset** per node and one `pulledNodeId`. On every frame (`tick`):
 
 ```text
 target = pulled node ?  clampMagnitude(cursor − node, 14 px)  :  (0, 0)
@@ -435,7 +435,7 @@ The file is fully parsed and validated into a **separate** `GraphModel` first, a
   Takes an immediate snapshot of the JavaFX `Canvas` via `canvas.snapshot(null, null)`, converts the `WritableImage` to an AWT `BufferedImage` using `SwingFXUtils.fromFXImage(img, null)`, and writes the raster image via `ImageIO.write(buffered, "png", file)`. A `FileChooser` with a `*.png` extension filter lets the user choose the destination file.
 - **SVG Export (`exportSvg` / `GraphSvgExporter`):**
   Iterates over the `GraphModel` directly and outputs clean vector `<svg>` markup:
-  - `<line>` per arrow, trimmed to circle perimeters with `GeometryUtils.trimmedSegment`.
+  - `<line>` per arrow, trimmed to circle perimeters with `GeometryUtils.trimmedArrowLine`.
   - `<polygon>` per arrowhead (one for directed arrows, two for bidirectional arrows).
   - `<circle>` per node with radius 20 px, filled `#3b82f6` with stroke `#1d4ed8`.
   - `<text>` per node label (with XML special characters escaped).
@@ -470,10 +470,10 @@ Run with `./mvnw test`. What is **not** covered by automated tests: the JavaFX g
 | `ARROW_HIT_TOLERANCE` | 6 px | `EditorApplication` | Arrow click distance |
 | `GEOMETRY_EPSILON` | 1e-6 | `EditorApplication` | Float comparison tolerance |
 | `ARROWHEAD_LENGTH` / `_ANGLE_DEGREES` | 12 px / 25° | `EditorApplication` | Arrowhead shape |
-| `PULL_RADIUS` | 90 px | `PullMotionModel` | Distance at which a node is pulled; also the drop-to-connect tolerance |
-| `MAX_PULL_OFFSET` | 14 px | `PullMotionModel` | Furthest a node is displaced |
-| `EASING_FACTOR` | 0.35 | `PullMotionModel` | Share of the gap covered each frame |
-| `SETTLED_EPSILON` | 0.05 px | `PullMotionModel` | Below this an offset counts as at rest |
+| `PULL_RADIUS` | 90 px | `NodePullAnimation` | Distance at which a node is pulled; also the drop-to-connect tolerance |
+| `MAX_PULL_OFFSET` | 14 px | `NodePullAnimation` | Furthest a node is displaced |
+| `EASING_FACTOR` | 0.35 | `NodePullAnimation` | Share of the gap covered each frame |
+| `REST_THRESHOLD` | 0.05 px | `NodePullAnimation` | Below this an offset counts as at rest |
 
 ---
 

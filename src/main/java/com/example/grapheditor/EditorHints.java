@@ -1,9 +1,6 @@
 package com.example.grapheditor;
 
-/**
- * Picks the short instruction line shown in the top bar for the current editor
- * state. Kept free of JavaFX so the wording rules are unit-testable.
- */
+// Hint text shown in the top bar for the current editor state.
 public final class EditorHints {
 
     public static final String IDLE =
@@ -20,11 +17,6 @@ public final class EditorHints {
     private EditorHints() {
     }
 
-    /**
-     * @param connectDragActive a left-drag that started on a node is in progress
-     * @param selectedCount     how many nodes are selected (orange); Shift+right-click adds more
-     * @param multiSelectedCount how many nodes are multi-selected (purple)
-     */
     public static String hintFor(boolean connectDragActive, int selectedCount, int multiSelectedCount) {
         if (connectDragActive) {
             return CONNECTING;

@@ -16,24 +16,24 @@ public class EditorLogicTest {
 
     @Test
     @DisplayName("Issue #7: Angle calculation covers horizontal, vertical, and diagonal directions")
-    void testCalculateAngle() {
-        assertEquals(0.0, GeometryUtils.calculateAngle(0, 0, 10, 0), 1e-9, "pointing right");
-        assertEquals(Math.PI, Math.abs(GeometryUtils.calculateAngle(0, 0, -10, 0)), 1e-9, "pointing left");
-        assertEquals(Math.PI / 2, GeometryUtils.calculateAngle(0, 0, 0, 10), 1e-9, "pointing down");
-        assertEquals(-Math.PI / 2, GeometryUtils.calculateAngle(0, 0, 0, -10), 1e-9, "pointing up");
-        assertEquals(Math.PI / 4, GeometryUtils.calculateAngle(0, 0, 10, 10), 1e-9, "diagonal down-right");
+    void testAngleBetweenPoints() {
+        assertEquals(0.0, GeometryUtils.angleBetweenPoints(0, 0, 10, 0), 1e-9, "pointing right");
+        assertEquals(Math.PI, Math.abs(GeometryUtils.angleBetweenPoints(0, 0, -10, 0)), 1e-9, "pointing left");
+        assertEquals(Math.PI / 2, GeometryUtils.angleBetweenPoints(0, 0, 0, 10), 1e-9, "pointing down");
+        assertEquals(-Math.PI / 2, GeometryUtils.angleBetweenPoints(0, 0, 0, -10), 1e-9, "pointing up");
+        assertEquals(Math.PI / 4, GeometryUtils.angleBetweenPoints(0, 0, 10, 10), 1e-9, "diagonal down-right");
     }
 
     @Test
     @DisplayName("Issue #8: Trimmed connector segment starts and ends on circle boundaries")
-    void testTrimmedSegment() {
+    void testTrimmedArrowLine() {
         double radius = EditorApplication.NODE_RADIUS;
-        double[] segment = GeometryUtils.trimmedSegment(100, 100, 220, 100, radius);
+        GeometryUtils.ArrowLine line = GeometryUtils.trimmedArrowLine(100, 100, 220, 100, radius);
 
-        assertEquals(120.0, segment[0], 1e-9);
-        assertEquals(100.0, segment[1], 1e-9);
-        assertEquals(200.0, segment[2], 1e-9);
-        assertEquals(100.0, segment[3], 1e-9);
+        assertEquals(120.0, line.startX(), 1e-9);
+        assertEquals(100.0, line.startY(), 1e-9);
+        assertEquals(200.0, line.endX(), 1e-9);
+        assertEquals(100.0, line.endY(), 1e-9);
     }
 
     @Test
@@ -82,7 +82,7 @@ public class EditorLogicTest {
         assertNull(model.hitNodeBody(160, 100, EditorApplication.NODE_RADIUS));
 
         // 30px apart is within 2R (40) of a fixed-radius-20 circle at (100,100).
-        GraphNode conflict = model.nearestConflictingNode(130, 100, EditorApplication.NODE_RADIUS, 1e-6);
+        GraphNode conflict = model.nearestOverlappingNode(130, 100, EditorApplication.NODE_RADIUS, 1e-6);
         assertEquals(a, conflict);
 
         GraphArrow arrow = new GraphArrow(model.allocateArrowId(), a.id(), b.id());
@@ -195,13 +195,9 @@ public class EditorLogicTest {
         assertEquals(b, model.findNode(b.id()));
     }
 
-    // -----------------------------------------------------------------
     // Issue #13: Save/load graph as JSON
-    // -----------------------------------------------------------------
 
-    /**
-     * Builds a small graph: three nodes, one one-way arrow and one bidirectional arrow.
-     */
+    // Three nodes, one one-way arrow and one two-way arrow.
     private static GraphModel sampleGraph() {
         GraphModel model = new GraphModel();
         GraphNode a = new GraphNode(model.allocateNodeId(), 120.5, 80.25);
@@ -365,9 +361,7 @@ public class EditorLogicTest {
                 "unexpected top-level key");
     }
 
-    // -----------------------------------------------------------------
     // Issue #12: Drag-connect preview line + pull motion animation
-    // -----------------------------------------------------------------
 
     @Test
     @DisplayName("Issue #12: lerp interpolates endpoints and eases monotonically toward the target")
@@ -415,28 +409,28 @@ public class EditorLogicTest {
         model.addNode(near);
         model.addNode(far);
 
-        assertEquals(near, model.nearestNodeWithin(140, 100, PullMotionModel.PULL_RADIUS, source.id()),
+        assertEquals(near, model.nearestNodeWithin(140, 100, NodePullAnimation.PULL_RADIUS, source.id()),
                 "nearest in-range node wins");
-        assertEquals(near, model.nearestNodeWithin(100, 100, PullMotionModel.PULL_RADIUS, source.id()),
+        assertEquals(near, model.nearestNodeWithin(100, 100, NodePullAnimation.PULL_RADIUS, source.id()),
                 "even with the cursor on the source node, the source is skipped as a candidate");
-        assertNull(model.nearestNodeWithin(400, 300, PullMotionModel.PULL_RADIUS, source.id()),
+        assertNull(model.nearestNodeWithin(400, 300, NodePullAnimation.PULL_RADIUS, source.id()),
                 "nodes beyond PULL_RADIUS are ignored");
 
         GraphModel lone = new GraphModel();
         GraphNode only = new GraphNode(lone.allocateNodeId(), 100, 100);
         lone.addNode(only);
-        assertNull(lone.nearestNodeWithin(100, 100, PullMotionModel.PULL_RADIUS, only.id()),
+        assertNull(lone.nearestNodeWithin(100, 100, NodePullAnimation.PULL_RADIUS, only.id()),
                 "a drag from the only node has nothing to pull");
     }
 
     @Test
     @DisplayName("Issue #12: Pulled node eases toward the cursor, capped at MAX_PULL_OFFSET")
-    void testPullMotionEasesTowardCursor() {
+    void testPullAnimationEasesTowardCursor() {
         GraphModel model = new GraphModel();
         GraphNode node = new GraphNode(model.allocateNodeId(), 100, 100);
         model.addNode(node);
 
-        PullMotionModel motion = new PullMotionModel();
+        NodePullAnimation motion = new NodePullAnimation();
         assertTrue(motion.isAtRest(), "no drag means no animation");
         assertArrayEquals(new double[]{100, 100}, motion.effectivePosition(node), 1e-9,
                 "an untracked node draws at its true position");
@@ -450,32 +444,32 @@ public class EditorLogicTest {
             motion.tick(model, 400, 100);
             double offset = motion.effectivePosition(node)[0] - node.x();
             assertTrue(offset >= previousOffset - 1e-9, "motion must be gradual, not a snap");
-            assertTrue(offset <= PullMotionModel.MAX_PULL_OFFSET + 1e-9,
+            assertTrue(offset <= NodePullAnimation.MAX_PULL_OFFSET + 1e-9,
                     "offset must never exceed MAX_PULL_OFFSET");
             previousOffset = offset;
         }
-        assertEquals(PullMotionModel.MAX_PULL_OFFSET, previousOffset, 1e-3,
+        assertEquals(NodePullAnimation.MAX_PULL_OFFSET, previousOffset, 1e-3,
                 "a sustained pull settles at the cap");
         assertEquals(100.0, motion.effectivePosition(node)[1], 1e-6,
                 "a horizontal pull must not move the node vertically");
 
         // One frame must not jump the whole way there: this is eased, not instant.
-        PullMotionModel single = new PullMotionModel();
+        NodePullAnimation single = new NodePullAnimation();
         single.setPulledNodeId(node.id());
         single.tick(model, 400, 100);
         double firstFrame = single.effectivePosition(node)[0] - node.x();
-        assertTrue(firstFrame > 0 && firstFrame < PullMotionModel.MAX_PULL_OFFSET,
+        assertTrue(firstFrame > 0 && firstFrame < NodePullAnimation.MAX_PULL_OFFSET,
                 "first frame is partway, not snapped: " + firstFrame);
     }
 
     @Test
     @DisplayName("Issue #12: Releasing a pull springs the node back and stops the animation")
-    void testPullMotionSpringsBackAfterRelease() {
+    void testPullAnimationSpringsBackAfterRelease() {
         GraphModel model = new GraphModel();
         GraphNode node = new GraphNode(model.allocateNodeId(), 100, 100);
         model.addNode(node);
 
-        PullMotionModel motion = new PullMotionModel();
+        NodePullAnimation motion = new NodePullAnimation();
         motion.setPulledNodeId(node.id());
         for (int frame = 0; frame < 30; frame++) {
             motion.tick(model, 400, 100);
@@ -498,12 +492,12 @@ public class EditorLogicTest {
 
     @Test
     @DisplayName("Issue #12: Pull offsets are cosmetic and never mutate the graph model")
-    void testPullMotionDoesNotMutateModel() {
+    void testPullAnimationDoesNotMutateModel() {
         GraphModel model = new GraphModel();
         GraphNode node = new GraphNode(model.allocateNodeId(), 100, 100);
         model.addNode(node);
 
-        PullMotionModel motion = new PullMotionModel();
+        NodePullAnimation motion = new NodePullAnimation();
         motion.setPulledNodeId(node.id());
         for (int frame = 0; frame < 20; frame++) {
             motion.tick(model, 400, 300);
@@ -516,12 +510,12 @@ public class EditorLogicTest {
 
     @Test
     @DisplayName("Issue #12: Reset drops all motion at once, for cancel or load")
-    void testPullMotionReset() {
+    void testPullAnimationReset() {
         GraphModel model = new GraphModel();
         GraphNode node = new GraphNode(model.allocateNodeId(), 100, 100);
         model.addNode(node);
 
-        PullMotionModel motion = new PullMotionModel();
+        NodePullAnimation motion = new NodePullAnimation();
         motion.setPulledNodeId(node.id());
         motion.tick(model, 400, 100);
 
@@ -534,12 +528,12 @@ public class EditorLogicTest {
 
     @Test
     @DisplayName("Issue #12: A node deleted mid-pull decays instead of chasing a missing position")
-    void testPullMotionHandlesDeletedNode() {
+    void testPullAnimationHandlesDeletedNode() {
         GraphModel model = new GraphModel();
         GraphNode node = new GraphNode(model.allocateNodeId(), 100, 100);
         model.addNode(node);
 
-        PullMotionModel motion = new PullMotionModel();
+        NodePullAnimation motion = new NodePullAnimation();
         motion.setPulledNodeId(node.id());
         motion.tick(model, 400, 100);
         model.removeNode(node.id());
@@ -655,9 +649,7 @@ public class EditorLogicTest {
         assertEquals(EditorHints.CONNECTING, EditorHints.hintFor(true, 2, 0));
     }
 
-    // -----------------------------------------------------------------
     // Issue #14: Editable text labels on nodes
-    // -----------------------------------------------------------------
 
     @Test
     @DisplayName("Issue #14: Nodes default to an empty label and keep it through move and rename copies")

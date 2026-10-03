@@ -1,8 +1,6 @@
 package com.example.grapheditor;
 
-/**
- * A reversible graph edit stored on the undo/redo stacks.
- */
+// One edit that can be applied and undone. Used for the undo/redo stacks.
 public interface EditCommand {
     void apply(GraphModel model);
 

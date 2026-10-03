@@ -1,9 +1,5 @@
 package com.example.grapheditor;
 
-/**
- * Changes a node's text label as one reversible step. Holds the node as it was
- * and as it becomes, so undo restores the exact previous label.
- */
 public class RenameNodeCommand implements EditCommand {
 
     private final GraphNode before;

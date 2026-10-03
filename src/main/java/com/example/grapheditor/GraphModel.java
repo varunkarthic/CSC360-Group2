@@ -5,10 +5,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Mutable graph state: nodes and arrows, plus proximity/hit-test queries
- * used by both creation and deletion gestures.
- */
 public class GraphModel {
 
     private final Map<Long, GraphNode> nodes = new LinkedHashMap<>();
@@ -25,11 +21,7 @@ public class GraphModel {
         return nextArrowId++;
     }
 
-    /**
-     * Replaces all graph state with the given nodes and arrows, as when opening a
-     * saved file, and restarts id allocation above the highest id present so that
-     * nodes created after a load cannot collide with loaded ones.
-     */
+    // Replaces the whole graph. Ids restart above the highest loaded id so new ones cannot collide.
     public void loadFrom(List<GraphNode> loadedNodes, List<GraphArrow> loadedArrows) {
         nodes.clear();
         arrows.clear();
@@ -78,10 +70,6 @@ public class GraphModel {
         return List.copyOf(arrows.values());
     }
 
-    /**
-     * Every arrow with this node as source or target, in a stable order,
-     * used to snapshot a node deletion for undo.
-     */
     public List<GraphArrow> incidentArrows(long nodeId) {
         List<GraphArrow> result = new ArrayList<>();
         for (GraphArrow arrow : arrows.values()) {
@@ -105,9 +93,7 @@ public class GraphModel {
         return findArrow(sourceId, targetId) != null;
     }
 
-    /**
-     * A node whose body (radius R) contains point (x, y), if any.
-     */
+    // A node whose circle contains the point.
     public GraphNode hitNodeBody(double x, double y, double radius) {
         for (GraphNode node : nodes.values()) {
             if (GeometryUtils.distanceSquared(x, y, node.x(), node.y()) <= radius * radius) {
@@ -117,11 +103,7 @@ public class GraphModel {
         return null;
     }
 
-    /**
-     * The node nearest to (x, y) within {@code radius}, ignoring {@code excludedId},
-     * or null if none is in range. Used to pick the node a connect-drag tugs toward
-     * the cursor, where the drag's own source node must never be a candidate.
-     */
+    // Nearest node within radius, skipping excludedId (the node being dragged).
     public GraphNode nearestNodeWithin(double x, double y, double radius, long excludedId) {
         double limitSquared = radius * radius;
         GraphNode nearest = null;
@@ -139,11 +121,8 @@ public class GraphModel {
         return nearest;
     }
 
-    /**
-     * The nearest node that a new radius-R circle at (x, y) would overlap,
-     * using the 2R placement-conflict radius, or null if placement is clear.
-     */
-    public GraphNode nearestConflictingNode(double x, double y, double radius, double epsilon) {
+    // Nearest node that a new node placed at (x, y) would overlap, or null if the spot is free.
+    public GraphNode nearestOverlappingNode(double x, double y, double radius, double epsilon) {
         double limitSquared = (2 * radius + epsilon) * (2 * radius + epsilon);
         GraphNode nearest = null;
         double nearestDistanceSquared = Double.MAX_VALUE;

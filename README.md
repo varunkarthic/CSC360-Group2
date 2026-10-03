@@ -97,7 +97,7 @@ Four small layers. The UI never edits the graph directly; it wraps every change 
 | **`GeometryUtils`** | Angles, boundary clipping, point-to-segment distance, easing maths. |
 | **`SelectionState`** | The orange auto-connect selection and its toggle rules. |
 | **`EditorHints`** | Chooses the short instruction line in the top bar for the current state. |
-| **`PullMotionModel`** | Cosmetic drag animation. Never touches the real graph. |
+| **`NodePullAnimation`** | Cosmetic drag animation. Never touches the real graph. |
 | **`GraphJsonCodec`** | Writes and strictly parses the JSON format. |
 | **`GraphSvgExporter`** | Pure vector exporter converting `GraphModel` directly to well-formed SVG. |
 
@@ -157,7 +157,7 @@ CSC360-Group2/
     │   ├── GeometryUtils.java         Geometry helpers
     │   ├── EditorHints.java           Top-bar hint text per state
     │   ├── SelectionState.java        Orange auto-connect selection
-    │   ├── PullMotionModel.java       Drag-pull animation state
+    │   ├── NodePullAnimation.java     Drag-pull animation state
     │   ├── GraphJsonCodec.java        JSON save / load
     │   └── GraphSvgExporter.java      Vector SVG export
     └── test/java/com/example/grapheditor/

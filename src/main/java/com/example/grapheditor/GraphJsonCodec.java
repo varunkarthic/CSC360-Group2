@@ -9,31 +9,12 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.function.BiConsumer;
 
-/**
- * Converts a {@link GraphModel} to and from a flat JSON document, so a graph can be
- * saved to disk and reopened later.
- *
- * <p>The schema is two arrays of fixed-shape objects whose fields are numbers,
- * booleans and (for node labels) strings:</p>
- * <pre>
- * {
- *   "nodes": [
- *     {"id": 1, "x": 120.0, "y": 80.0, "label": "Start"}
- *   ],
- *   "arrows": [
- *     {"id": 1, "sourceId": 1, "targetId": 2, "bidirectional": false}
- *   ]
- * }
- * </pre>
- *
- * <p>Because that shape is this narrow, both directions are hand-written and the
- * project stays dependency-free (JavaFX and JUnit only). The reader is deliberately
- * strict: a malformed or internally inconsistent document raises
- * {@link IllegalArgumentException} rather than loading a partial graph. The
- * exceptions are {@code bidirectional} (defaults to false) and a node's {@code label}
- * (defaults to empty), both optional so that files written before those fields
- * existed still open. Labels are written only when non-empty.</p>
- */
+// Saves a graph to JSON and loads it back. Format:
+// {"nodes": [{"id": 1, "x": 120.0, "y": 80.0, "label": "Start"}],
+//  "arrows": [{"id": 1, "sourceId": 1, "targetId": 2, "bidirectional": false}]}
+// "label" and "bidirectional" are optional so older files still load.
+// The format is small, so the JSON is read and written by hand (no library).
+// Bad input throws IllegalArgumentException instead of loading a partial graph.
 public final class GraphJsonCodec {
 
     private static final String NODES_KEY = "nodes";
@@ -42,17 +23,6 @@ public final class GraphJsonCodec {
     private GraphJsonCodec() {
     }
 
-    // -----------------------------------------------------------------
-    // Writing
-    // -----------------------------------------------------------------
-
-    /**
-     * Renders the model's nodes and arrows as a JSON document, in the model's own
-     * stable iteration order.
-     *
-     * @throws IllegalArgumentException if a node coordinate is NaN or infinite,
-     *                                  which JSON cannot represent
-     */
     public static String toJson(GraphModel model) {
         Objects.requireNonNull(model, "model");
 
@@ -90,7 +60,6 @@ public final class GraphJsonCodec {
         json.append("\n  ]");
     }
 
-    /** A JSON string literal: quotes, backslashes and control characters are escaped. */
     private static String quote(String text) {
         StringBuilder out = new StringBuilder("\"");
         for (int i = 0; i < text.length(); i++) {
@@ -113,10 +82,7 @@ public final class GraphJsonCodec {
         return out.append('"').toString();
     }
 
-    /**
-     * {@code Double.toString} is locale-independent, so coordinates always use a
-     * '.' decimal separator regardless of the machine that wrote the file.
-     */
+    // Double.toString always uses '.', whatever the machine's locale.
     private static String formatCoordinate(double value) {
         if (!Double.isFinite(value)) {
             throw new IllegalArgumentException("Cannot write non-finite coordinate: " + value);
@@ -124,19 +90,7 @@ public final class GraphJsonCodec {
         return Double.toString(value);
     }
 
-    // -----------------------------------------------------------------
-    // Reading
-    // -----------------------------------------------------------------
-
-    /**
-     * Parses a document produced by {@link #toJson(GraphModel)} into a new model whose
-     * id allocation already sits above every loaded id.
-     *
-     * @throws IllegalArgumentException if the document is malformed, is missing the
-     *                                  {@code nodes}/{@code arrows} arrays, repeats an
-     *                                  id, or contains an arrow referencing a node that
-     *                                  is not in the file
-     */
+    // Throws IllegalArgumentException for bad JSON, duplicate ids, or arrows pointing to missing nodes.
     public static GraphModel fromJson(String json) {
         Objects.requireNonNull(json, "json");
 
@@ -188,10 +142,6 @@ public final class GraphJsonCodec {
         return model;
     }
 
-    /**
-     * Reads the outer object: string keys mapped to arrays of flat objects whose
-     * values are numbers or booleans.
-     */
     private static Map<String, List<Map<String, Object>>> readDocument(JsonScanner scanner) {
         Map<String, List<Map<String, Object>>> document = new LinkedHashMap<>();
         scanner.expect('{');
@@ -260,10 +210,6 @@ public final class GraphJsonCodec {
         return number;
     }
 
-    /**
-     * A boolean field that may be absent, in which case it defaults to false so that
-     * files written before the field existed still load.
-     */
     private static boolean optionalBoolean(Map<String, Object> fields, String key, String owner) {
         Object value = fields.get(key);
         if (value == null) {
@@ -276,7 +222,6 @@ public final class GraphJsonCodec {
         return flag;
     }
 
-    /** A string field that may be absent, in which case it is empty. */
     private static String optionalString(Map<String, Object> fields, String key, String owner) {
         Object value = fields.get(key);
         if (value == null) {
@@ -289,10 +234,7 @@ public final class GraphJsonCodec {
         return text;
     }
 
-    /**
-     * An id field, which must be a whole positive number since ids are allocated
-     * sequentially from 1.
-     */
+    // Ids are whole numbers starting from 1.
     private static long requireId(Map<String, Object> fields, String key, String owner) {
         double value = requireNumber(fields, key, owner);
         long id = (long) value;
@@ -304,11 +246,7 @@ public final class GraphJsonCodec {
         return id;
     }
 
-    /**
-     * Cursor over the JSON text. Supports exactly the subset this format uses —
-     * objects, arrays, strings (with the standard escapes), numbers and booleans — and reports the
-     * offset of whatever it could not read.
-     */
+    // Reads JSON text one token at a time. Only supports what this format uses.
     private static final class JsonScanner {
 
         private final String source;
@@ -384,10 +322,6 @@ public final class GraphJsonCodec {
             }
         }
 
-        /**
-         * A single scalar: a string yields a String, {@code true}/{@code false} a Boolean,
-         * anything else is read as a number.
-         */
         Object readValue() {
             skipWhitespace();
             if (index < source.length() && source.charAt(index) == '"') {

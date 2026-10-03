@@ -1,8 +1,5 @@
 package com.example.grapheditor;
 
-/**
- * Connects two already-existing nodes (primary-button drag from A to B).
- */
 public class AddArrowCommand implements EditCommand {
 
     private final GraphArrow arrow;

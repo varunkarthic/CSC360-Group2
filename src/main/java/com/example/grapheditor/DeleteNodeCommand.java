@@ -2,10 +2,7 @@ package com.example.grapheditor;
 
 import java.util.List;
 
-/**
- * Deletes a node and every arrow incident on it in one reversible edit
- * (stationary primary click on that node).
- */
+// Deletes a node together with every arrow attached to it.
 public class DeleteNodeCommand implements EditCommand {
 
     private final GraphNode node;
