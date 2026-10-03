@@ -28,7 +28,7 @@ Click to place nodes, drag to connect them, and the editor handles the rest:
 arrows clip cleanly to node edges, every action can be undone, and the whole
 graph saves to a plain JSON file or exports to PNG/SVG.
 
-- **Build graphs by mouse.** Place nodes, drag arrows between them, move them around.
+- **Build graphs by mouse.** Click to place nodes, drag arrows between them, move them around.
 - **Bidirectional arrows.** Drag back along an existing arrow to make it two-way.
 - **Undo / redo everything.** Each action is a reversible command.
 - **Save / load JSON.** Human-readable files, no external libraries.
