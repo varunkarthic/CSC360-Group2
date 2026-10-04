@@ -42,24 +42,44 @@ graph saves to a plain JSON file or exports to PNG/SVG.
   <img src="media/demo_2.gif" alt="Graph Editor demo: building a tree in the resizable, full-screen editor" width="100%">
 </p>
 
-<p align="center"><sub>Prefer high-resolution video? <a href="media/demo_video_2.mp4">Open demo video 2</a>.</sub></p>
-
-<p align="center">
-  <img src="media/demo_1.gif" alt="Graph Editor Demo" width="100%">
-</p>
-
-<p align="center"><sub>Prefer high-resolution video? <a href="media/demo_video_1.mp4">Open demo video 1</a>.</sub></p>
-
-<sub>Media files are stored with [Git LFS](https://git-lfs.com). Run `git lfs install` once before cloning so the GIFs and videos download as real files.</sub>
+<p align="center"><sub>Prefer high-resolution video? <a href="media/demo_video_2.mp4">Open the demo video</a>.</sub></p>
 
 ## Quick start
 
 **Requirement:** JDK 21. Maven is not needed; the included wrapper downloads it.
 
-| | macOS / Linux | Windows |
-|---|---|---|
-| **Run** | `./mvnw javafx:run` | `mvnw.cmd javafx:run` |
-| **Test** | `./mvnw test` | `mvnw.cmd test` |
+### macOS / Linux
+
+```bash
+git clone https://github.com/varunkarthic/CSC360-Group2.git
+cd CSC360-Group2
+./mvnw javafx:run
+```
+
+Run the tests:
+
+```bash
+./mvnw test
+```
+
+### Windows
+
+```bat
+git clone https://github.com/varunkarthic/CSC360-Group2.git
+cd CSC360-Group2
+mvnw.cmd javafx:run
+```
+
+Run the tests:
+
+```bat
+mvnw.cmd test
+```
+
+> [!NOTE]
+> The demo GIFs and videos in `media/` are stored with [Git LFS](https://git-lfs.com).
+> The app builds and runs without it. If you want the media too, install Git LFS and run
+> `git lfs install` before cloning. In a clone made without it, run `git lfs pull`.
 
 ## How to use
 
@@ -148,7 +168,6 @@ CSC360-Group2/
 ├── technical_details.md     In-depth technical documentation
 ├── test.json                Sample graph to try Load
 ├── .gitattributes           Routes media/ files through Git LFS
-├── media/demo_1.gif         Animated demo recording
 ├── media/demo_2.gif         Animated demo recording (resizable window)
 ├── media/demo_video_1.mp4   Demo recording
 ├── media/demo_video_2.mp4   Demo recording (resizable window)
