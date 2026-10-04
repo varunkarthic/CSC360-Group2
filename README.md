@@ -8,7 +8,7 @@
   <img alt="Java 21" src="https://img.shields.io/badge/Java-21-437291?style=flat-square">
   <img alt="JavaFX 23" src="https://img.shields.io/badge/JavaFX-23-2b6cb0?style=flat-square">
   <img alt="Maven" src="https://img.shields.io/badge/build-Maven-c71a36?style=flat-square">
-  <img alt="44 unit tests" src="https://img.shields.io/badge/tests-44%20JUnit-2e8b57?style=flat-square">
+  <img alt="45 unit tests" src="https://img.shields.io/badge/tests-45%20JUnit-2e8b57?style=flat-square">
   <img alt="Zero dependencies beyond JavaFX" src="https://img.shields.io/badge/deps-JavaFX%20only-444?style=flat-square">
 </p>
 
@@ -70,6 +70,7 @@ graph saves to a plain JSON file or exports to PNG/SVG.
 | **Undo / Redo** | Buttons, or `Ctrl/Cmd+Z` and `Ctrl/Cmd+Shift+Z` |
 | **Save / Load** | **Save** / **Load** buttons (`.json`) |
 | **Export PNG / SVG** | **Export PNG** / **Export SVG** buttons |
+| **Full screen** | **Full Screen** button or `F11` (or resize / maximise the window) |
 | **Cancel** | `Esc` |
 
 ## How it works
@@ -117,7 +118,7 @@ Four small layers. The UI never edits the graph directly; it wraps every change 
 | Feature | What happens |
 |---|---|
 | **Node labels** | Double-click a node to give it a text label, drawn centred on the node (and following it while pulled). Labelling is one undo step, and labels are saved to JSON. |
-| **Fixed-size nodes** | Radius 20 px on an 800×600 canvas; a right-click too close to an existing node selects it instead of stacking a new one on top. |
+| **Fixed-size nodes** | Radius 20 px on a canvas that fills the window (800×600 to start, resizable, full screen via the button or `F11`); a right-click too close to an existing node selects it instead of stacking a new one on top. |
 | **Selection** | Single select shows an orange ring, multi-select a purple ring. |
 | **Auto-connect** | Right-clicking empty space with one or more nodes selected (`Shift` + right-click adds more) creates the new node *and* an arrow from each selected node as one undo step, and the orange ring disappears as soon as the arrow is drawn. |
 | **Context hints** | The top bar shows a one-line tip that changes with the state: idle, node selected, multi-selected, or dragging a connection. |
@@ -161,7 +162,7 @@ CSC360-Group2/
     │   ├── GraphJsonCodec.java        JSON save / load
     │   └── GraphSvgExporter.java      Vector SVG export
     └── test/java/com/example/grapheditor/
-        └── EditorLogicTest.java       44 unit tests
+        └── EditorLogicTest.java       45 unit tests
 ```
 
 ## Team

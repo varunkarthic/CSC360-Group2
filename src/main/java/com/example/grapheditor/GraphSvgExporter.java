@@ -24,9 +24,16 @@ public final class GraphSvgExporter {
     }
 
     public static String toSvg(GraphModel model) {
+        return toSvg(model, CANVAS_WIDTH, CANVAS_HEIGHT);
+    }
+
+    // Exports at the given size, so a graph drawn on a resized window is not cropped.
+    public static String toSvg(GraphModel model, double width, double height) {
         Objects.requireNonNull(model, "model");
 
-        StringBuilder svg = new StringBuilder("<svg width=\"800\" height=\"600\" xmlns=\"http://www.w3.org/2000/svg\">\n");
+        StringBuilder svg = new StringBuilder("<svg width=\"").append(Math.round(width))
+                .append("\" height=\"").append(Math.round(height))
+                .append("\" xmlns=\"http://www.w3.org/2000/svg\">\n");
 
         for (GraphArrow arrow : model.getArrows()) {
             GraphNode source = model.findNode(arrow.sourceId());

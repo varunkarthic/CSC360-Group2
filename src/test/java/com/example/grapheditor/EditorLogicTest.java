@@ -790,6 +790,19 @@ public class EditorLogicTest {
     }
 
     @Test
+    @DisplayName("Resizable window: SVG export uses the current canvas size, defaulting to 800x600")
+    void testSvgExportUsesCanvasSize() {
+        GraphModel model = new GraphModel();
+        model.addNode(new GraphNode(1, 1200, 900));
+
+        String svg = GraphSvgExporter.toSvg(model, 1280.4, 960.6);
+
+        assertTrue(svg.startsWith("<svg width=\"1280\" height=\"961\" xmlns=\"http://www.w3.org/2000/svg\">"));
+        assertTrue(svg.contains("<circle cx=\"1200.0\" cy=\"900.0\""));
+        assertEquals(GraphSvgExporter.toSvg(model, 800, 600), GraphSvgExporter.toSvg(model));
+    }
+
+    @Test
     @DisplayName("Issue #15: GraphSvgExporter exports nodes, arrows, arrowheads and labels matching canvas geometry")
     void testSvgExportSmallModel() {
         GraphModel model = new GraphModel();

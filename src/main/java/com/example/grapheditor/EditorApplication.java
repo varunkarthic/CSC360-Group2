@@ -20,6 +20,9 @@ import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Pane;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.TextAlignment;
@@ -43,6 +46,7 @@ import javax.imageio.ImageIO;
 
 public class EditorApplication extends Application {
 
+    // Initial canvas size. The canvas then follows the window as it is resized.
     public static final double CANVAS_WIDTH = 800.0;
     public static final double CANVAS_HEIGHT = 600.0;
 
@@ -125,19 +129,40 @@ public class EditorApplication extends Application {
         exportPngButton.setOnAction(event -> exportPng());
         Button exportSvgButton = new Button("Export SVG");
         exportSvgButton.setOnAction(event -> exportSvg());
+        Button fullScreenButton = new Button("Full Screen");
+        fullScreenButton.setOnAction(event -> toggleFullScreen());
+        List<Button> buttons = List.of(undoButton, redoButton, saveButton, loadButton,
+                exportPngButton, exportSvgButton, fullScreenButton);
+        // Buttons never shrink below their text; only the hint gives up space (with an ellipsis).
+        for (Button button : buttons) {
+            button.setMinWidth(Region.USE_PREF_SIZE);
+        }
         hintLabel = new Label(EditorHints.IDLE);
         hintLabel.setTextFill(Color.web("#475569"));
-        HBox toolbar = new HBox(8, undoButton, redoButton, saveButton, loadButton,
-                exportPngButton, exportSvgButton, hintLabel);
+        hintLabel.setMinWidth(0);
+        HBox.setHgrow(hintLabel, Priority.ALWAYS);
+        HBox toolbar = new HBox(8);
+        toolbar.getChildren().addAll(buttons);
+        toolbar.getChildren().add(hintLabel);
         toolbar.setAlignment(Pos.CENTER_LEFT);
         toolbar.setPadding(new Insets(8));
 
+        // The canvas fills whatever space the window gives it and redraws when that changes.
+        Pane canvasHolder = new Pane(canvas);
+        canvasHolder.setPrefSize(CANVAS_WIDTH, CANVAS_HEIGHT);
+        canvasHolder.setMinSize(0, 0);
+        canvas.widthProperty().bind(canvasHolder.widthProperty());
+        canvas.heightProperty().bind(canvasHolder.heightProperty());
+        canvas.widthProperty().addListener((obs, oldValue, newValue) -> render());
+        canvas.heightProperty().addListener((obs, oldValue, newValue) -> render());
+
         BorderPane root = new BorderPane();
         root.setTop(toolbar);
-        root.setCenter(canvas);
+        root.setCenter(canvasHolder);
         root.setFocusTraversable(true);
 
-        Scene scene = new Scene(root, CANVAS_WIDTH, CANVAS_HEIGHT + 40);
+        // No fixed size: the window opens wide enough for the full toolbar and hint.
+        Scene scene = new Scene(root);
         scene.getAccelerators().put(
                 new KeyCodeCombination(KeyCode.Z, KeyCombination.SHORTCUT_DOWN), this::undo);
         scene.getAccelerators().put(
@@ -146,13 +171,22 @@ public class EditorApplication extends Application {
         scene.setOnKeyPressed(event -> {
             if (event.getCode() == KeyCode.ESCAPE) {
                 cancelInteraction();
+            } else if (event.getCode() == KeyCode.F11) {
+                toggleFullScreen();
             }
         });
 
         primaryStage.setTitle("CSC360 Group 2 - Node Editor");
         primaryStage.setScene(scene);
-        primaryStage.setResizable(false);
+        primaryStage.setResizable(true);
+        primaryStage.fullScreenProperty().addListener((obs, wasFullScreen, isFullScreen) ->
+                fullScreenButton.setText(isFullScreen ? "Exit Full Screen" : "Full Screen"));
         primaryStage.show();
+        // Never let the window get narrower than the buttons need.
+        double decorationWidth = primaryStage.getWidth() - scene.getWidth();
+        double decorationHeight = primaryStage.getHeight() - scene.getHeight();
+        primaryStage.setMinWidth(toolbar.minWidth(-1) + decorationWidth);
+        primaryStage.setMinHeight(toolbar.prefHeight(-1) + 4 * NODE_RADIUS + decorationHeight);
 
         root.requestFocus();
         render();
@@ -367,8 +401,8 @@ public class EditorApplication extends Application {
             return;
         }
 
-        if (x < NODE_RADIUS || x > CANVAS_WIDTH - NODE_RADIUS
-                || y < NODE_RADIUS || y > CANVAS_HEIGHT - NODE_RADIUS) {
+        if (x < NODE_RADIUS || x > canvas.getWidth() - NODE_RADIUS
+                || y < NODE_RADIUS || y > canvas.getHeight() - NODE_RADIUS) {
             return;
         }
 
@@ -384,6 +418,10 @@ public class EditorApplication extends Application {
         } else {
             execute(new AddNodeCommand(newNode));
         }
+    }
+
+    private void toggleFullScreen() {
+        mainStage.setFullScreen(!mainStage.isFullScreen());
     }
 
     private void cancelInteraction() {
@@ -529,7 +567,7 @@ public class EditorApplication extends Application {
             return;
         }
         try {
-            Files.writeString(file.toPath(), GraphSvgExporter.toSvg(model), StandardCharsets.UTF_8);
+            Files.writeString(file.toPath(), GraphSvgExporter.toSvg(model, canvas.getWidth(), canvas.getHeight()), StandardCharsets.UTF_8);
         } catch (IOException e) {
             showError("Could not export SVG", describe(e));
         }
@@ -625,7 +663,7 @@ public class EditorApplication extends Application {
 
     private void clearCanvas() {
         gc.setFill(BACKGROUND_COLOR);
-        gc.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        gc.fillRect(0, 0, canvas.getWidth(), canvas.getHeight());
     }
 
     private void drawNode(GraphNode node) {

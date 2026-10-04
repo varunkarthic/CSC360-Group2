@@ -29,12 +29,12 @@ Deep-dive into how the Graph Editor is built. For what it does and how to run it
 | **Language** | Java 21 |
 | **UI toolkit** | JavaFX 23.0.2 (`Canvas` 2D drawing) |
 | **Build** | Maven 3.9.9 via the Maven Wrapper |
-| **Tests** | JUnit 5.11.4, 44 tests |
+| **Tests** | JUnit 5.11.4, 45 tests |
 | **Java package** | `com.example.grapheditor` (single flat package, 18 classes) |
 | **Size** | about 1,800 lines of main code, about 650 lines of tests |
 | **Module system** | Not used (no `module-info.java`); runs on the classpath |
 
-The user edits a **directed graph** on an 800×600 canvas. All edits are wrapped in **command objects** so they can be undone and redone. The graph can be saved to and loaded from a **JSON** file, or exported to **PNG** and **SVG**. A short **animation** gives feedback while dragging a connection.
+The user edits a **directed graph** on a resizable canvas (800×600 to start). All edits are wrapped in **command objects** so they can be undone and redone. The graph can be saved to and loaded from a **JSON** file, or exported to **PNG** and **SVG**. A short **animation** gives feedback while dragging a connection.
 
 ---
 
@@ -339,7 +339,7 @@ Rendering is **immediate mode**: `render()` clears the whole canvas and redraws 
 
 Both nodes and arrows are drawn at `pullAnimation.effectivePosition(node)`, so a tugged node and its arrows move together. The preview line starts on the source circle's edge and is skipped while the cursor is still inside the source node.
 
-The window is 800 × 640 (canvas 800 × 600 plus a 40 px toolbar) and not resizable.
+The window opens wide enough for the whole toolbar, with an 800 × 600 canvas below it, and is resizable. The canvas is bound to the size of its holder pane and redraws whenever that changes. Toolbar buttons never shrink below their text; only the hint label gives up space (ending in an ellipsis), and the window's minimum width is set so all buttons always fit. **Full Screen** (or `F11`) toggles full screen.
 
 ---
 
@@ -445,7 +445,7 @@ The file is fully parsed and validated into a **separate** `GraphModel` first, a
 
 ## 12. Testing
 
-`EditorLogicTest` (JUnit 5, 44 tests) exercises everything except the JavaFX window. No JavaFX toolkit is started; tests run headless.
+`EditorLogicTest` (JUnit 5, 45 tests) exercises everything except the JavaFX window. No JavaFX toolkit is started; tests run headless.
 
 | Area | Tests cover |
 |---|---|
@@ -464,7 +464,7 @@ Run with `./mvnw test`. What is **not** covered by automated tests: the JavaFX g
 
 | Constant | Value | Where | Meaning |
 |---|---|---|---|
-| `CANVAS_WIDTH` / `CANVAS_HEIGHT` | 800 / 600 | `EditorApplication` | Canvas size |
+| `CANVAS_WIDTH` / `CANVAS_HEIGHT` | 800 / 600 | `EditorApplication` | Initial canvas size (the canvas then follows the window) |
 | `NODE_RADIUS` | 20 px | `EditorApplication` | Node size |
 | `DRAG_THRESHOLD` | 5 px | `EditorApplication` | Click vs drag cut-off |
 | `ARROW_HIT_TOLERANCE` | 6 px | `EditorApplication` | Arrow click distance |
@@ -504,7 +504,7 @@ Worth knowing before a demo or a change:
 - **Dropping a moved node within 90 px of another node connects instead of moving**, because the drop is treated as a connect target. Drop farther away to move.
 - **Arrows are one per direction.** A second arrow in an existing direction is silently ignored.
 - **Hit testing and drawing are O(n)** over nodes and arrows. This is fine for hand-drawn graphs, not for thousands of items.
-- **Fixed canvas.** 800 × 600, non-resizable, no zoom or pan. New nodes must sit at least one radius from the edge, but moves are not clamped, so a node can be dragged partly or fully off-canvas.
+- **No zoom or pan.** The canvas grows with the window, but there is no zoom or scrolling; shrinking the window hides nodes beyond its edge rather than moving them. PNG/SVG export uses the current canvas size. New nodes must sit at least one radius from the edge, but moves are not clamped, so a node can be dragged partly or fully off-canvas.
 - **JSON parser** does not support comments (not needed by the schema).
 - **No weights or colours** on nodes and arrows; the data model holds ids, positions, direction and a node label.
 - **Labels are not clipped or wrapped.** A long label can overflow its 20 px circle.
