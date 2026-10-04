@@ -39,10 +39,18 @@ graph saves to a plain JSON file or exports to PNG/SVG.
 ## Demo
 
 <p align="center">
-  <img src="media/demo.gif" alt="Graph Editor Demo" width="100%">
+  <img src="media/demo_2.gif" alt="Graph Editor demo: building a tree in the resizable, full-screen editor" width="100%">
 </p>
 
-<p align="center"><sub>Prefer high-resolution video? <a href="media/demo_video_1.mp4">Open the demo video</a>.</sub></p>
+<p align="center"><sub>Prefer high-resolution video? <a href="media/demo_video_2.mp4">Open demo video 2</a>.</sub></p>
+
+<p align="center">
+  <img src="media/demo_1.gif" alt="Graph Editor Demo" width="100%">
+</p>
+
+<p align="center"><sub>Prefer high-resolution video? <a href="media/demo_video_1.mp4">Open demo video 1</a>.</sub></p>
+
+<sub>Media files are stored with [Git LFS](https://git-lfs.com). Run `git lfs install` once before cloning so the GIFs and videos download as real files.</sub>
 
 ## Quick start
 
@@ -139,8 +147,11 @@ CSC360-Group2/
 ├── mvnw, mvnw.cmd           Maven wrapper
 ├── technical_details.md     In-depth technical documentation
 ├── test.json                Sample graph to try Load
-├── media/demo.gif           Animated demo recording
+├── .gitattributes           Routes media/ files through Git LFS
+├── media/demo_1.gif         Animated demo recording
+├── media/demo_2.gif         Animated demo recording (resizable window)
 ├── media/demo_video_1.mp4   Demo recording
+├── media/demo_video_2.mp4   Demo recording (resizable window)
 └── src/
     ├── main/java/com/example/grapheditor/
     │   ├── Main.java                  Launcher
