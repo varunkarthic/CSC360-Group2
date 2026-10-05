@@ -18,3 +18,9 @@ Notes.md
 
 # IDE
 .vscode/
+
+# Claude Code local config
+.claude/
+
+# Presentation deck
+GraphEditor_Presentation.pptx

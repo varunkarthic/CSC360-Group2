@@ -1,385 +1,364 @@
 # Technical Details
 
-Deep-dive into how the Graph Editor is built. For what it does and how to run it, see the [README](README.md).
+How the Graph Editor is built. For what it does and how to run it, see the [README](README.md).
 
 **Contents**
-[1. Overview](#1-overview) ·
-[2. Tech stack and packages](#2-tech-stack-and-packages) ·
-[3. Build and run](#3-build-and-run) ·
-[4. Architecture](#4-architecture) ·
-[5. Data model](#5-data-model) ·
-[6. Input handling](#6-input-handling) ·
-[7. Command pattern and history](#7-command-pattern-and-history) ·
+[1. Quick facts](#1-quick-facts) ·
+[2. Terms used in this document](#2-terms-used-in-this-document) ·
+[3. Tools and libraries](#3-tools-and-libraries) ·
+[4. How the code is organised](#4-how-the-code-is-organised) ·
+[5. The graph data](#5-the-graph-data) ·
+[6. Mouse and keyboard handling](#6-mouse-and-keyboard-handling) ·
+[7. Undo and redo](#7-undo-and-redo) ·
 [8. Geometry](#8-geometry) ·
-[9. Rendering](#9-rendering) ·
-[10. Drag-pull animation](#10-drag-pull-animation) ·
-[11. Persistence](#11-persistence) ·
-[12. Testing](#12-testing) ·
-[13. Constants](#13-constants-reference) ·
-[14. Design decisions](#14-design-decisions) ·
-[15. Known limitations](#15-known-limitations)
+[9. Drawing](#9-drawing) ·
+[10. The pull animation](#10-the-pull-animation) ·
+[11. Saving, loading and exporting](#11-saving-loading-and-exporting) ·
+[12. Tests](#12-tests) ·
+[13. Why we built it this way](#13-why-we-built-it-this-way) ·
+[14. Known limitations](#14-known-limitations)
 
 ---
 
-## 1. Overview
+## 1. Quick facts
 
 | | |
 |---|---|
-| **Type** | Desktop GUI application |
+| **What it is** | A desktop app for drawing directed graphs (circles joined by arrows) |
 | **Language** | Java 21 |
-| **UI toolkit** | JavaFX 23.0.2 (`Canvas` 2D drawing) |
-| **Build** | Maven 3.9.9 via the Maven Wrapper |
-| **Tests** | JUnit 5.11.4, 45 tests |
-| **Java package** | `com.example.grapheditor` (single flat package, 18 classes) |
-| **Size** | about 1,800 lines of main code, about 650 lines of tests |
-| **Module system** | Not used (no `module-info.java`); runs on the classpath |
+| **Window toolkit** | JavaFX 23.0.2 |
+| **Build tool** | Maven 3.9.9, through the included wrapper (`mvnw`) |
+| **Tests** | JUnit 5, 45 tests |
+| **Code** | 21 classes in one package (`com.example.grapheditor`), about 1,900 lines, plus about 870 lines of tests |
 
-The user edits a **directed graph** on a resizable canvas (800×600 to start). All edits are wrapped in **command objects** so they can be undone and redone. The graph can be saved to and loaded from a **JSON** file, or exported to **PNG** and **SVG**. A short **animation** gives feedback while dragging a connection.
+The user clicks to place nodes and drags to connect them. Every edit can be undone and redone. The graph can be saved to a JSON file, loaded back, or exported as a PNG or SVG picture.
 
 ---
 
-## 2. Tech stack and packages
+## 2. Terms used in this document
 
-### 2.1 Third-party dependencies (`pom.xml`)
-
-| Artifact | Version | Scope | Why |
-|---|---|---|---|
-| `org.openjfx:javafx-controls` | 23.0.2 | compile | Buttons, alerts, layout controls |
-| `org.openjfx:javafx-graphics` | 23.0.2 | compile | Stage, Scene, Canvas, input events, animation |
-| `org.openjfx:javafx-swing` | 23.0.2 | compile | Canvas snapshot conversion to `BufferedImage` (`SwingFXUtils`) for PNG export |
-| `org.junit.jupiter:junit-jupiter` | 5.11.4 (via BOM) | test | Test framework and assertions |
-| `org.junit.platform:junit-platform-launcher` | 5.11.4 (via BOM) | test | Lets Surefire launch JUnit 5 |
-| `org.junit:junit-bom` | 5.11.4 | import | Keeps all JUnit artifacts on matching versions |
-
-`javafx-base` comes in automatically as a dependency of the JavaFX modules above. No JSON, logging or external graphic utility libraries are used.
-
-### 2.2 Build plugins
-
-| Plugin | Version | Purpose |
-|---|---|---|
-| `maven-surefire-plugin` | 3.5.2 | Runs the JUnit 5 tests (`mvn test`) |
-| `javafx-maven-plugin` | 0.0.8 | Runs the app (`javafx:run`); resolves the correct native JavaFX jars for the current OS |
-
-The compiler is configured with `maven.compiler.release=21` and UTF-8 source encoding. The main class is set in the `main.class` property (`EditorApplication`).
-
-### 2.3 JavaFX packages used
-
-| Package | Classes used | Used for |
-|---|---|---|
-| `javafx.application` | `Application` | App lifecycle (`start`, `launch`) |
-| `javafx.stage` | `Stage`, `FileChooser` | Window; open/save dialogs |
-| `javafx.scene` | `Scene` | Root scene and keyboard accelerators |
-| `javafx.scene.canvas` | `Canvas`, `GraphicsContext` | All drawing |
-| `javafx.scene.control` | `Button`, `Alert` | Toolbar buttons; error dialogs |
-| `javafx.scene.layout` | `BorderPane`, `HBox` | Toolbar on top, canvas in centre |
-| `javafx.scene.input` | `MouseEvent`, `MouseButton`, `KeyCode`, `KeyCodeCombination`, `KeyCombination` | Mouse gestures and shortcuts |
-| `javafx.scene.paint` | `Color` | Palette |
-| `javafx.geometry` | `Insets` | Toolbar padding |
-| `javafx.animation` | `AnimationTimer` | Per-frame animation loop |
-| `javafx.embed.swing` | `SwingFXUtils` | Converts JavaFX `WritableImage` to AWT `BufferedImage` |
-| `javafx.scene.image` | `WritableImage` | Snapshot target for canvas image export |
-
-Only `EditorApplication` imports JavaFX. Every other class is plain Java, which is why the logic can be unit-tested without starting a UI.
-
-### 2.4 Java standard library used
-
-| Package | Used for |
+| Term | Meaning |
 |---|---|
-| `java.util` | `List`, `Map`, `LinkedHashMap`, `Set`, `HashSet`, `ArrayList`, `Iterator`, `Objects`, `NoSuchElementException`, `Locale` |
-| `java.util.function` | `BiConsumer` (JSON writer helper) |
-| `java.nio.file` / `java.nio.charset` | `Files.readString` / `writeString` with UTF-8 |
-| `java.io` | `File` (from `FileChooser`), `IOException` |
-| `java.awt.image` | `BufferedImage` (for PNG image export via `ImageIO`) |
-| `javax.imageio` | `ImageIO.write` (PNG writing) |
-
-Java language features used: **records** (`GraphNode`, `GraphArrow`), **pattern matching for `instanceof`** (JSON reader), **generics** (`LinkedStack<T>`), lambdas and method references, `final` and static nested classes.
+| **Node** | A circle on the canvas |
+| **Arrow** | A line between two nodes. It points from a *source* node to a *target* node. |
+| **Directed graph** | A graph where arrows have a direction (A to B is different from B to A) |
+| **Canvas** | The rectangular area of the window we draw on |
+| **JavaFX** | Java's library for building windows, buttons and drawings |
+| **Maven / Maven Wrapper** | Maven downloads libraries and builds the project. The wrapper (`mvnw`) is a small script that fetches Maven itself, so nobody has to install it. |
+| **JUnit** | A library for writing automated tests |
+| **Record** | A short way to write a Java class that only holds data. Its fields cannot change after it is created. |
+| **Immutable** | Cannot be changed once created. To "change" it, you make a new copy. |
+| **Interface** | A list of method names a class promises to provide |
+| **Generic (`LinkedStack<T>`)** | A class that works with any type. `T` is a placeholder for that type. |
+| **Stack** | A pile where you only add to, or take from, the top (last in, first out) |
+| **Linked list** | Items chained together, each one pointing to the next |
+| **Hit test** | Checking what is under the mouse when the user clicks |
+| **Command pattern** | A design where each edit is an object that knows how to do itself and how to undo itself |
+| **Selection** | Nodes the user has marked, shown with a coloured ring |
+| **JSON** | A plain-text file format for data, such as `{"nodes": [...]}` |
+| **Parser** | Code that reads text and turns it into data |
+| **Exception** | Java's way of reporting an error (for example `IllegalArgumentException`) |
+| **Classpath / module system** | Two ways Java finds its code and libraries. This project uses the simpler classpath way (no `module-info.java`). |
+| **O(1), O(n)** | How the work grows with the amount of data. O(1) is always the same. O(n) grows in step with the number of items. |
+| **Easing** | Movement that starts quickly and slows down as it arrives |
+| **px** | Pixels, the dots on screen |
 
 ---
 
-## 3. Build and run
+## 3. Tools and libraries
 
-| Task | Command (macOS / Linux) | Windows |
+### 3.1 Libraries (`pom.xml`)
+
+| Library | Version | Used for |
+|---|---|---|
+| `javafx-controls` | 23.0.2 | Buttons, dialogs |
+| `javafx-graphics` | 23.0.2 | Window, canvas, mouse and keyboard events, animation |
+| `javafx-swing` | 23.0.2 | Converts the canvas picture to a format Java can write as PNG |
+| `junit-jupiter` | 5.11.4 | Tests (test only) |
+| `junit-platform-launcher` | 5.11.4 | Lets Maven start the tests (test only) |
+
+We do not use any JSON, logging or graphics libraries. The JSON reader and writer are written by hand (see section 11).
+
+### 3.2 Build plugins
+
+| Plugin | Purpose |
+|---|---|
+| `maven-surefire-plugin` | Runs the tests with `./mvnw test` |
+| `javafx-maven-plugin` | Runs the app with `./mvnw javafx:run`, and picks the right JavaFX files for your operating system |
+
+### 3.3 Running it
+
+| Task | macOS / Linux | Windows |
 |---|---|---|
 | Run the app | `./mvnw javafx:run` | `mvnw.cmd javafx:run` |
-| Run all tests | `./mvnw test` | `mvnw.cmd test` |
+| Run the tests | `./mvnw test` | `mvnw.cmd test` |
 | Compile only | `./mvnw compile` | `mvnw.cmd compile` |
 
-- The wrapper (`.mvn/wrapper/maven-wrapper.properties`) downloads Apache Maven 3.9.9 on first use, so no local Maven is needed.
-- `Main` is a thin launcher that calls `EditorApplication.main`. A launcher class that does **not** extend `Application` avoids the "JavaFX runtime components are missing" error when the app is started from the classpath. `javafx:run` itself uses `EditorApplication` directly.
+`Main` is a tiny class that just calls `EditorApplication.main`. It exists because starting a JavaFX app directly from a class that extends `Application` can fail with "JavaFX runtime components are missing" when run from the classpath. Starting from a plain class avoids that.
+
+### 3.4 Where JavaFX is used
+
+Only `EditorApplication` imports JavaFX. The other 20 classes are plain Java, so the tests can run without opening a window.
 
 ---
 
-## 4. Architecture
+## 4. How the code is organised
 
 ```text
-                        ┌─────────────────────────────┐
-   mouse / keys ───────▶│      EditorApplication      │──── draws ───▶ Canvas
-                        │  (view + controller)        │
-                        └───────┬─────────────┬───────┘
-                   creates      │             │ owns
-                                ▼             ▼
-                        ┌─────────────┐   ┌───────────────┐
-                        │ EditCommand │   │ LinkedStack ×2│  undo / redo
-                        │ apply/undo  │   └───────────────┘
-                        └──────┬──────┘
-                               │ mutates
-                               ▼
-   ┌────────────────┐   ┌─────────────┐   reads    ┌──────────────────┐
-   │ GraphJsonCodec │◀─▶│ GraphModel  │◀───────────│ NodePullAnimation│ (cosmetic only)
-   └────────────────┘   └──────┬──────┘            └──────────────────┘
-                               │ uses
-                        ┌──────▼──────┐
-                        │GeometryUtils│  (pure static maths)
-                        └─────────────┘
+   mouse / keys ──────▶  EditorApplication  ──── draws ───▶ Canvas
+                        (window + event handling)
+                          │                │
+                 creates  │                │ keeps two
+                          ▼                ▼
+                    EditCommand        LinkedStack ×2
+                    (apply / undo)     (undo list, redo list)
+                          │
+                          │ changes
+                          ▼
+   GraphJsonCodec ◀──▶ GraphModel ◀── reads ── NodePullAnimation
+   (save / load)       (the graph)             (visual effect only)
+                          │
+                          ▼
+                    GeometryUtils (maths helpers)
 ```
 
-**Roles, mapped to the classes**
-
-| Layer | Classes | Responsibility |
+| Part | Classes | Job |
 |---|---|---|
-| View / controller | `EditorApplication`, `Main` | UI, event handling, deciding *what the user meant*, drawing |
-| Commands | `EditCommand` + 7 implementations | One reversible edit each |
-| Model | `GraphModel`, `GraphNode`, `GraphArrow` | Graph state and queries |
-| Utilities | `GeometryUtils`, `LinkedStack` | Maths and history storage |
-| Animation | `NodePullAnimation` | Temporary visual offsets |
-| Persistence | `GraphJsonCodec` | JSON read and write |
+| Window and events | `EditorApplication`, `Main`, `EditorHints` | Shows the window, works out what the user meant, draws, shows the hint text |
+| Edits | `EditCommand` and 8 classes that implement it | One undoable edit each |
+| Graph data | `GraphModel`, `GraphNode`, `GraphArrow` | Holds the nodes and arrows and answers questions about them |
+| Selection | `SelectionState` | Remembers which nodes are selected for auto-connect |
+| Helpers | `GeometryUtils`, `LinkedStack` | Maths, and the undo/redo storage |
+| Animation | `NodePullAnimation` | Small temporary movement while dragging |
+| Files | `GraphJsonCodec`, `GraphSvgExporter` | JSON save/load, SVG export |
 
-**Key rule:** the UI never mutates the model directly. Every change is a command run through `execute()`, so history stays correct.
+**The main rule:** the window code never changes the graph directly. Every change is wrapped in a command and run through `execute()`. That is what keeps undo and redo correct.
 
 ---
 
-## 5. Data model
+## 5. The graph data
 
 ### 5.1 `GraphNode` and `GraphArrow`
 
-Both are immutable Java **records**.
+Both are immutable records.
 
 ```java
-record GraphNode(long id, double x, double y)                       // x, y = circle centre
+record GraphNode(long id, double x, double y, String label)   // x, y = centre of the circle
 record GraphArrow(long id, long sourceId, long targetId, boolean bidirectional)
 ```
 
-- Arrows refer to nodes **by id**, not by object reference. This keeps them valid when a node is replaced with a moved copy.
-- `GraphNode.withPosition(x, y)` returns a new node with the same id.
-- The three-argument `GraphArrow` constructor defaults `bidirectional` to `false`.
-- Immutability is what makes undo simple: a command keeps the old copy and puts it back.
+- An arrow stores the **ids** of its two nodes, not the node objects themselves. Moving a node means replacing it with a copy at a new position (same id), and the arrow still finds it.
+- A node with no label has an empty string as its label.
+- Because records never change, undo is simple: a command keeps the old copy and puts it back.
 
 ### 5.2 `GraphModel`
 
-| Field | Type | Notes |
-|---|---|---|
-| `nodes` | `LinkedHashMap<Long, GraphNode>` | Keyed by id; insertion order preserved |
-| `arrows` | `LinkedHashMap<Long, GraphArrow>` | Keyed by id; insertion order preserved |
-| `nextNodeId`, `nextArrowId` | `long` | Start at 1; increase on each `allocate…Id()` |
+It keeps two `LinkedHashMap`s (a map is a lookup table from id to object; this kind also remembers the order items were added), one for nodes and one for arrows. It also keeps two counters that hand out the next free node id and arrow id, starting at 1.
 
-`addNode` / `addArrow` use `Map.put`, so adding an object with an **existing id replaces it in place**. Move and upgrade commands rely on this.
+Adding an object with an id that already exists **replaces** the old one. Move, rename and "make two-way" all rely on this.
 
-| Method | Purpose |
+| Method | What it does |
 |---|---|
-| `allocateNodeId()`, `allocateArrowId()` | Next unique id |
-| `addNode`, `removeNode`, `addArrow`, `removeArrow` | Mutation |
-| `findNode(id)`, `getNodes()`, `getArrows()` | Lookup; lists are defensive copies (`List.copyOf`) |
-| `incidentArrows(nodeId)` | Arrows touching a node (for delete/undo) |
-| `findArrow(src, tgt)`, `arrowExists(src, tgt)` | Directed-pair lookup |
-| `hitNodeBody(x, y, r)` | Node whose circle contains the point |
-| `nearestNodeWithin(x, y, r, excludedId)` | Closest node inside a radius, skipping one |
-| `nearestOverlappingNode(x, y, r, eps)` | Closest node within `2r + eps` (placement conflict) |
-| `loadFrom(nodes, arrows)` | Replace everything; reset id counters to `max id + 1` |
+| `allocateNodeId()`, `allocateArrowId()` | Give out the next unused id |
+| `addNode`, `removeNode`, `addArrow`, `removeArrow` | Change the graph |
+| `findNode(id)`, `getNodes()`, `getArrows()` | Look things up. The lists returned are copies, so callers cannot change the model by accident. |
+| `incidentArrows(nodeId)` | All arrows touching a node |
+| `findArrow(src, tgt)`, `arrowExists(src, tgt)` | Look for an arrow in one direction |
+| `hitNodeBody(x, y, r)` | The node whose circle contains the point |
+| `nearestNodeWithin(x, y, r, excludedId)` | Closest node within a distance, skipping one node |
+| `nearestOverlappingNode(x, y, r, eps)` | Closest node that a new node at this point would overlap |
+| `loadFrom(nodes, arrows)` | Replace everything, and set the id counters to the highest id plus 1 |
 
-Distance checks compare **squared** distances, which avoids `sqrt`.
+Distances are compared as **squared** values (`dx² + dy²`), which skips a slow square-root step and gives the same ordering.
 
 ---
 
-## 6. Input handling
+## 6. Mouse and keyboard handling
 
-All gesture logic lives in `EditorApplication`. Handlers are attached to the canvas: `onMousePressed`, `onMouseDragged`, `onMouseReleased`. The context menu is suppressed.
+All of this is in `EditorApplication`. The handlers are attached to the canvas, and the right-click context menu is turned off.
 
-### 6.1 Secondary gesture (create / select)
+### 6.1 Right-click (create and select)
 
-A **secondary gesture** is a right-click, or a left-click with `Ctrl` held (for trackpads). It is handled on *press*:
+Right-click, or `Ctrl` + left-click for trackpads. It is handled the moment the button goes down.
 
-1. Hit-test the point; if no node is hit, look for a node within `2 × radius` (`nearestOverlappingNode`).
-2. If a node was found: toggle it as the single selected node (`selectedNodeId`).
-3. Else, if the point is closer than one radius to the canvas edge: ignore.
-4. Else create a node with a new id:
-   - a node is selected → `AddConnectedNodeCommand` (new node + arrow from the selected node), then clear the selection;
-   - otherwise → `AddNodeCommand`.
+1. If the click is on a node, or close enough that a new node would overlap one, then select or deselect that node. `Shift` adds to the selection instead of replacing it. Selected nodes get an orange ring.
+2. Otherwise, if the click is closer than one radius to the canvas edge, do nothing.
+3. Otherwise create a new node.
+   - If some nodes are selected, one command adds the new node plus an arrow from **each** selected node to it (`AddConnectedNodeCommand`). The selection is then cleared.
+   - If nothing is selected, just add the node (`AddNodeCommand`).
 
-### 6.2 Primary gesture (click, drag)
+### 6.2 Left-click and drag
 
-A left-button gesture is classified only when the button is **released**:
+We only decide what the gesture was when the button is **released**.
 
 ```text
-press   : clear single selection; store press point; note node under cursor (if any)
-drag    : track the largest distance moved from the press point;
-          if pressed on a node → update preview cursor + choose node to "pull"
-release : max distance > 5 px ?  → completeDrag(...)
-                              no → completeClick(...)
+press   : clear orange selection, remember the press point and any node under it
+drag    : remember the furthest the mouse has moved from the press point.
+          If we started on a node, show a dashed preview line and
+          pick a nearby node to "pull" (see section 10)
+release : moved more than 5 px?  yes → it was a drag
+                                 no  → it was a click
 ```
 
-**`completeDrag`** (pressed on a node; a press on empty space is ignored):
+**Drag** (only matters if it started on a node):
 
-| Release position | Result |
+| Where it was released | What happens |
 |---|---|
-| On, or within 90 px of, another node | If that direction already exists → nothing. If the reverse arrow exists → `UpgradeArrowCommand` (skipped when already bidirectional). Else → `AddArrowCommand`. |
-| Empty space | `MoveNodesCommand` by `(release − press)`. Moves every multi-selected node if the pressed node is one of them, else just the pressed node. |
+| On another node, or within 90 px of one | If an arrow in that direction exists: nothing. If the opposite arrow exists: make it two-way (`UpgradeArrowCommand`). Otherwise add a new arrow. |
+| Empty space | Move the node by the distance dragged (`MoveNodesCommand`). If the node is part of the purple multi-selection, all of those nodes move together. |
 
-The 90 px fallback (`resolveConnectTarget`) matches the distance at which the pull animation starts, so a connection that *looked* successful really connects.
+The 90 px allowance matches the distance at which the pull animation starts. So if the animation showed a node reaching for the cursor, letting go will connect to it.
 
-**`completeClick`** (movement ≤ 5 px):
+**Click** (moved 5 px or less):
 
-| Under the cursor | Result |
+| What is under the mouse | What happens |
 |---|---|
-| Node + `Shift` held | Toggle in the multi-selection (no command) |
-| Node | `DeleteNodeCommand` (node and its incident arrows) |
-| Arrow (both press and release hit the same arrow) | `DeleteArrowCommand` |
+| A node, with `Shift` held | Add or remove it from the purple multi-selection (no command, so it is not undoable) |
+| A node | Delete it and its arrows, after a 0.3 second wait (`DeleteNodeCommand`) |
+| An arrow (the press and the release must both hit it) | Delete the arrow (`DeleteArrowCommand`) |
 | Nothing | Nothing |
 
-### 6.3 Keyboard and toolbar
+**Double-click on a node** opens a text box to set its label (`RenameNodeCommand`). The 0.3 second wait before deleting exists so that the first click of a double-click does not delete the node before the second click arrives. The double-click cancels the waiting delete.
+
+### 6.3 Keyboard and buttons
 
 | Input | Action |
 |---|---|
-| `Ctrl/Cmd + Z` | Undo (`SHORTCUT_DOWN` maps to Cmd on macOS, Ctrl elsewhere) |
+| `Ctrl/Cmd + Z` | Undo (Cmd on macOS, Ctrl elsewhere) |
 | `Ctrl/Cmd + Shift + Z` | Redo |
-| `Esc` | Clear selections, abort the current gesture, reset the pull animation |
-| Undo / Redo / Save / Load buttons | Same actions as above and the file dialogs |
+| `Esc` | Clear both selections, cancel the current gesture, stop the animation |
+| Undo, Redo, Save, Load, Export PNG, Export SVG buttons | Same actions, plus the file dialogs |
+
+A line of hint text in the toolbar changes with the current state (`EditorHints`), for example "Node selected: right-click empty space to add a linked node".
 
 ---
 
-## 7. Command pattern and history
+## 7. Undo and redo
 
-### 7.1 The interface
+### 7.1 The command interface
 
 ```java
 public interface EditCommand {
-    void apply(GraphModel model);   // do (or redo) the edit
+    void apply(GraphModel model);   // do the edit (also used to redo it)
     void undo(GraphModel model);    // reverse it exactly
 }
 ```
 
 ### 7.2 The eight commands
 
-| Command | State stored | `apply` | `undo` |
+| Command | What it remembers | `apply` | `undo` |
 |---|---|---|---|
-| `AddNodeCommand` | node | add node | remove node |
-| `AddArrowCommand` | arrow | add arrow | remove arrow |
-| `AddConnectedNodeCommand` | node, arrow | add node, then arrow | remove arrow, then node |
-| `DeleteNodeCommand` | node, incident arrows (snapshot) | remove arrows, then node | add node, then arrows |
-| `DeleteArrowCommand` | arrow | remove arrow | add arrow |
-| `UpgradeArrowCommand` | `before`, `after` (bidirectional copy, same id) | put `after` | put `before` |
-| `MoveNodesCommand` | original nodes, `dx`, `dy` | put copies moved by `(dx, dy)` | put originals back |
-| `RenameNodeCommand` | `before`, `after` (relabelled copy, same id and position) | put `after` | put `before` |
+| `AddNodeCommand` | the node | add it | remove it |
+| `AddArrowCommand` | the arrow | add it | remove it |
+| `AddConnectedNodeCommand` | the node and a list of arrows | add node, then arrows | remove arrows, then node |
+| `DeleteNodeCommand` | the node and its arrows | remove arrows, then node | add node, then arrows |
+| `DeleteArrowCommand` | the arrow | remove it | add it back |
+| `UpgradeArrowCommand` | the arrow before and after (same id, two-way) | put in the "after" copy | put back the "before" copy |
+| `MoveNodesCommand` | the original nodes, and how far they moved | put in moved copies | put back the originals |
+| `RenameNodeCommand` | the node before and after (new label) | put in the "after" copy | put back the "before" copy |
 
-Order matters where two objects are involved: an arrow is always added *after* its nodes and removed *before* them, so the model never holds an arrow pointing at a missing node.
+Order matters: an arrow is always added after its nodes and removed before them. That way the graph never contains an arrow pointing at a node that does not exist.
 
-### 7.3 History: `LinkedStack<T>`
+### 7.3 `LinkedStack<T>`
 
-A generic singly linked LIFO stack built from a private static `Entry<T>(value, next)`:
+Our own stack, built from a chain of small `Entry` objects. Each entry holds a value and points to the one below it. (Building it ourselves was a course requirement.)
 
-| Operation | Cost | Notes |
+| Operation | Work | Notes |
 |---|---|---|
-| `push(v)` | O(1) | Rejects `null` (`Objects.requireNonNull`) |
-| `pop()` / `peek()` | O(1) | Throw `NoSuchElementException` when empty |
-| `isEmpty()`, `size()` | O(1) | `size` is a counter |
-| `clear()` | O(1) | Drops the top pointer |
+| `push(v)` | O(1) | Refuses `null` |
+| `pop()`, `peek()` | O(1) | Throw `NoSuchElementException` if the stack is empty |
+| `isEmpty()`, `size()` | O(1) | `size` is kept in a counter |
+| `clear()` | O(1) | Just forgets the top entry |
 
-### 7.4 Flow in `EditorApplication`
+### 7.4 How the three actions work
 
 ```text
-execute(cmd):  cmd.apply(model) → undoStack.push(cmd) → redoStack.clear() → render()
-undo():        cmd = undoStack.pop() → cmd.undo(model) → redoStack.push(cmd) → render()
-redo():        cmd = redoStack.pop() → cmd.apply(model) → undoStack.push(cmd) → render()
+execute(cmd): run cmd.apply → push on undo stack → empty the redo stack → redraw
+undo():       pop from undo stack → run cmd.undo → push on redo stack → redraw
+redo():       pop from redo stack → run cmd.apply → push on undo stack → redraw
 ```
 
-Undo and redo also clear the single selection. Loading a file clears both stacks.
+Making a new edit empties the redo stack, because the "future" it pointed to no longer exists. Loading a file empties both stacks.
 
 ---
 
 ## 8. Geometry
 
-All in `GeometryUtils` (pure static methods, shared by drawing **and** hit testing so both always agree).
+`GeometryUtils` holds small maths functions. Drawing and hit testing both use them, so what you see is what you can click.
 
-| Function | Formula / behaviour |
+| Function | What it does |
 |---|---|
-| `distanceSquared(x1,y1,x2,y2)` | `dx² + dy²` |
-| `angleBetweenPoints(x1,y1,x2,y2)` | `atan2(y2 − y1, x2 − x1)`; correct in every quadrant |
-| `trimmedArrowLine(sx,sy,tx,ty,r)` | `θ = angle(s→t)`; start = `s + r·(cosθ, sinθ)`; end = `t − r·(cosθ, sinθ)`. Returns an `ArrowLine(startX, startY, endX, endY, angle)` record |
-| `pointToSegmentDistance(p, a, b)` | Project `p` on line `ab`: `t = ((p−a)·(b−a)) / |b−a|²`, clamp `t` to [0, 1], distance to `a + t(b−a)`. A zero-length segment gives `t = 0` |
-| `lerp(a, b, t)` | `a + (b − a)·t` |
-| `clampMagnitude(dx, dy, max)` | Shortens the vector to `max` keeping its direction; unchanged if already shorter or zero |
+| `distanceSquared` | `dx² + dy²` |
+| `angleBetweenPoints` | The direction from one point to another, using `atan2` (works in every direction) |
+| `trimmedArrowLine` | Takes two node centres and shortens the line at both ends by the node radius, so the arrow starts and ends on the circle edge instead of its centre |
+| `pointToSegmentDistance` | How far a point is from a line segment. Used to check whether a click landed on an arrow. |
+| `lerp(a, b, t)` | A point `t` of the way from `a` to `b` (`a + (b − a)·t`) |
+| `clampMagnitude` | Shortens a movement to a maximum length without changing its direction |
 
-**Arrowhead.** A filled triangle at the tip, 12 px long. Its two base corners are placed at `tip − 12·(cos(θ ± 25°), sin(θ ± 25°))`. A bidirectional arrow draws a second head at the start using `θ + π`.
+**Arrowhead:** a filled triangle, 12 px long, at the end of the line. Its two back corners sit 25° either side of the line. A two-way arrow gets a second head at the other end.
 
-**Arrow hit test** (`EditorApplication.hitArrowAt`): for each arrow, take the *clipped* segment (what is visible on screen) and measure the click's distance to it. An arrow counts as hit at ≤ 6 px; the closest wins.
+**Clicking an arrow:** for each arrow we measure the distance from the click to the visible part of its line. If it is 6 px or less, it counts as a hit, and the closest arrow wins.
 
 ---
 
-## 9. Rendering
+## 9. Drawing
 
-Rendering is **immediate mode**: `render()` clears the whole canvas and redraws everything. It is called after every state change and on every animation frame.
+The app redraws **everything** from scratch each time. `render()` clears the canvas and draws the whole graph again. It runs after every change and on every animation frame. This is simple, and fast enough for graphs this size.
 
-**Draw order** (later draws on top):
+**Draw order** (later items appear on top):
 
-1. Background fill
-2. All arrows (line + head(s))
-3. Dashed drag preview line (only during a connect-drag)
-4. All nodes (fill, outline, selection ring)
-
-**Look and feel**
+1. Background
+2. All arrows
+3. The dashed preview line (only while dragging from a node)
+4. All nodes (fill, outline, labels, selection rings)
 
 | Element | Style |
 |---|---|
 | Background | `#f8fafc` |
-| Node | Fill `#3b82f6`, 2 px outline `#1d4ed8`, radius 20 |
-| Single selection ring | `#f59e0b`, 3 px, inset 4 px |
-| Multi-selection ring | `#8b5cf6`, 3 px, inset 4 px |
+| Node | Fill `#3b82f6`, 2 px outline `#1d4ed8`, radius 20 px |
+| Selection ring (right-click) | Orange `#f59e0b` |
+| Multi-selection ring (`Shift` + left-click) | Purple `#8b5cf6` |
 | Arrow line | `#334155`, 2.5 px |
-| Arrowhead | Fill `#dc2626` |
-| Preview line | `#94a3b8`, 2 px, dashes 8 px on / 6 px off |
+| Arrowhead | `#dc2626` |
+| Preview line | `#94a3b8`, dashed 8 px line and 6 px gap |
+| Label | White, size 11 |
 
-Both nodes and arrows are drawn at `pullAnimation.effectivePosition(node)`, so a tugged node and its arrows move together. The preview line starts on the source circle's edge and is skipped while the cursor is still inside the source node.
-
-The window opens wide enough for the whole toolbar, with an 800 × 600 canvas below it, and is resizable. The canvas is bound to the size of its holder pane and redraws whenever that changes. Toolbar buttons never shrink below their text; only the hint label gives up space (ending in an ellipsis), and the window's minimum width is set so all buttons always fit. **Full Screen** (or `F11`) toggles full screen.
+Nodes and arrows are drawn using the animated position, so a pulled node and its arrows move together. The window opens wide enough for the whole toolbar, with an 800 × 600 canvas below it, and it can be resized. The canvas follows the size of the area it sits in and is redrawn whenever that changes. Toolbar buttons never shrink below their text. Only the hint label gives up space (it ends in "..."), and the window has a minimum width so every button always fits. **Full Screen** (or `F11`) toggles full screen.
 
 ---
 
-## 10. Drag-pull animation
+## 10. The pull animation
 
-While dragging from a node, the nearest other node within **90 px** of the cursor is gently pulled toward it. When the drag ends it eases back.
+While you drag from a node, the closest other node within 90 px of the mouse leans toward it a little. When you let go, it eases back. It is only for feedback.
 
-### 10.1 Mechanism
-
-`NodePullAnimation` keeps a `{dx, dy}` **offset** per node and one `pulledNodeId`. On every frame (`tick`):
+`NodePullAnimation` keeps a small x/y **offset** for each node. On every frame (about 60 times a second):
 
 ```text
-target = pulled node ?  clampMagnitude(cursor − node, 14 px)  :  (0, 0)
-offset = lerp(offset, target, 0.35)          // covers 35 % of the remaining gap
-if |offset| < 0.05 on both axes and node is not pulled → forget the offset
+goal   = the pulled node ?  the direction to the mouse, capped at 14 px  :  (0, 0)
+offset = offset + 35 % of the gap to the goal
 ```
 
-Using one rule for both directions gives an exponential ease: fast at first, then settling. The screen position is `true position + offset`.
+Taking a fixed share of the remaining gap each frame gives easing: quick at first, then it settles. When every offset is below 0.05 px and nothing is being pulled, the offsets are dropped.
 
-### 10.2 Driver
+The animation is driven by a JavaFX `AnimationTimer`, which calls our code on every frame. It starts the first time a drag updates the pull, and **stops itself** once everything is at rest, so the app uses no CPU when idle.
 
-`EditorApplication` starts a JavaFX `AnimationTimer` the first time a drag updates the pull. Each frame it calls `tick`, then `render`. When `isAtRest()` is true (nothing pulled, no offsets left) **and** no connect-drag is active, the timer stops itself, so an idle app does no work.
+Things that are always true:
 
-### 10.3 Guarantees
-
-- Offsets are **never** written into `GraphModel`. Hit testing and commands use true coordinates.
-- If a tracked node is deleted mid-animation, its offset simply decays to zero.
+- Offsets are never stored in `GraphModel`. Clicks and commands use the real positions.
+- If a node is deleted during the animation, its offset just fades to zero.
 - `reset()` clears everything at once (used by `Esc` and after loading a file).
-- The class has no JavaFX imports, so it is fully unit-tested.
+- The class has no JavaFX code in it, so it is unit tested.
 
 ---
 
-## 11. Persistence
+## 11. Saving, loading and exporting
 
-### 11.1 File format
+### 11.1 The JSON file
 
 ```json
 {
   "nodes": [
-    {"id": 1, "x": 207.0, "y": 89.0}
+    {"id": 1, "x": 207.0, "y": 89.0, "label": "Start"}
   ],
   "arrows": [
     {"id": 1, "sourceId": 1, "targetId": 2, "bidirectional": true}
@@ -387,126 +366,110 @@ Using one rule for both directions gives an exponential ease: fast at first, the
 }
 ```
 
-`test.json` in the repo root is a ready-made sample.
+`label` is only written when it is not empty, and `bidirectional` may be left out (it then means `false`). `test.json` in the project root is a ready-made sample.
 
-### 11.2 Writing (`toJson`)
+### 11.2 Writing (`GraphJsonCodec.toJson`)
 
-Builds the text with a `StringBuilder`, one entry per line, in the model's insertion order. Coordinates use `Double.toString`, which is locale-independent (always a `.` decimal point). A `NaN` or infinite coordinate raises `IllegalArgumentException`.
+Builds the text piece by piece with a `StringBuilder`, one entry per line, in the order items were added. Numbers use `Double.toString`, which always uses `.` as the decimal point whatever the computer's language setting. A coordinate that is `NaN` (not a number) or infinite throws an `IllegalArgumentException`. Special characters in labels (quotes, backslashes, control characters) are escaped, so any label comes back exactly as it was saved.
 
-### 11.3 Reading (`fromJson`)
+### 11.3 Reading (`GraphJsonCodec.fromJson`)
 
-A small hand-written recursive parser, `JsonScanner`, walks the text character by character. It supports exactly the subset this format needs: objects, arrays, strings (with the standard escapes `\"`, `\\`, `\/`, `\n`, `\r`, `\t`, `\b`, `\f`, `\uXXXX`), numbers and `true`/`false`. A node's optional `label` is the only string value; keys stay plain.
+A small hand-written parser (`JsonScanner`) reads the text one character at a time. It only supports what this file format needs: objects, arrays, strings, numbers and `true`/`false`.
 
-**Validation rules**
+The reader is strict. A file is rejected with an `IllegalArgumentException` if any of these is true:
 
-| Problem | Result |
+| Problem | Example |
 |---|---|
-| Malformed syntax (missing `:`/`,`/brackets, bad number, unterminated string) | `IllegalArgumentException` with the character offset |
-| Text after the closing `}` | Rejected |
-| Top-level key other than `nodes` / `arrows` | Rejected |
-| Missing `nodes` or `arrows` array | Rejected |
-| Missing or non-numeric `x`, `y`, ids; NaN/infinite values | Rejected |
-| An id that is not a whole number ≥ 1 | Rejected |
-| Duplicate node id or duplicate arrow id | Rejected |
-| Arrow whose `sourceId` / `targetId` is not a node in the file | Rejected |
-| `bidirectional` present but not a boolean | Rejected |
-| `bidirectional` absent | Accepted, defaults to `false` (older files still load) |
-| `label` present but not a string, or with an unknown/truncated escape | Rejected |
-| `label` absent | Accepted, defaults to empty (older files still load) |
+| Broken syntax | Missing bracket, comma or colon; bad number; string never closed (the error says where) |
+| Extra text after the closing `}` | `{...} garbage` |
+| A top-level key other than `nodes` and `arrows` | `"color": "red"` |
+| `nodes` or `arrows` is missing | |
+| `x`, `y` or an id is missing, not a number, or `NaN`/infinite | |
+| An id that is not a whole number of at least 1 | `0`, `1.5` |
+| Two nodes or two arrows with the same id | |
+| An arrow pointing at a node that is not in the file | |
+| `bidirectional` is not `true` or `false` | `"yes"` |
+| `label` is not a string, or has a bad escape | |
 
-Labels are written only when non-empty, with quotes, backslashes and control characters escaped, so any label round-trips exactly.
+Older files without `label` or `bidirectional` still load.
 
-### 11.4 Save and load in the UI
+### 11.4 Save and load in the app
 
 ```text
-Save: FileChooser (*.json, default "graph.json") → toJson(model) → Files.writeString (UTF-8)
-Load: FileChooser → Files.readString → fromJson
-        ├─ IOException            → "Could not read graph" alert
-        ├─ IllegalArgumentException → "Not a valid graph file" alert   (current graph untouched)
-        └─ success → model.loadFrom(...), clear undo/redo, clear selection,
-                     abort any gesture, reset animation, render
+Save: file dialog (*.json, default "graph.json") → toJson → write file as UTF-8
+Load: file dialog → read file → fromJson
+        ├─ can't read the file     → "Could not read graph" message
+        ├─ not valid               → "Not a valid graph file" message (current graph untouched)
+        └─ OK → copy into the model, clear undo/redo, clear orange selection,
+                cancel the current gesture, reset the animation, redraw
 ```
 
-The file is fully parsed and validated into a **separate** `GraphModel` first, and only then copied in. A bad file can never leave a half-loaded graph.
+The file is read and checked into a **separate** `GraphModel` first. Only if that works is it copied into the real one, so a bad file can never leave you with half a graph.
 
-### 11.5 PNG and SVG Export
+### 11.5 Export
 
-- **PNG Export (`exportPng`):**
-  Takes an immediate snapshot of the JavaFX `Canvas` via `canvas.snapshot(null, null)`, converts the `WritableImage` to an AWT `BufferedImage` using `SwingFXUtils.fromFXImage(img, null)`, and writes the raster image via `ImageIO.write(buffered, "png", file)`. A `FileChooser` with a `*.png` extension filter lets the user choose the destination file.
-- **SVG Export (`exportSvg` / `GraphSvgExporter`):**
-  Iterates over the `GraphModel` directly and outputs clean vector `<svg>` markup:
-  - `<line>` per arrow, trimmed to circle perimeters with `GeometryUtils.trimmedArrowLine`.
-  - `<polygon>` per arrowhead (one for directed arrows, two for bidirectional arrows).
-  - `<circle>` per node with radius 20 px, filled `#3b82f6` with stroke `#1d4ed8`.
-  - `<text>` per node label (with XML special characters escaped).
-  `GraphSvgExporter` is a pure function without JavaFX imports, making it fast and unit-testable.
+**PNG** (`exportPng`): takes a snapshot picture of the canvas, converts it with `SwingFXUtils` into a Java `BufferedImage`, and writes it out with `ImageIO`. This is why `javafx-swing` is a dependency.
+
+**SVG** (`GraphSvgExporter`): SVG is a text format for vector pictures (shapes, not pixels), so it stays sharp at any zoom. We do not take a picture. We go through the `GraphModel` and write one SVG element per item:
+
+- a `<line>` for each arrow, shortened to the circle edges
+- a `<polygon>` for each arrowhead (two for a two-way arrow)
+- a `<circle>` for each node (radius 20, same colours as the canvas)
+- a `<text>` for each label (XML special characters escaped)
+
+`GraphSvgExporter` has no JavaFX code, so it is unit tested.
 
 ---
 
-## 12. Testing
+## 12. Tests
 
-`EditorLogicTest` (JUnit 5, 45 tests) exercises everything except the JavaFX window. No JavaFX toolkit is started; tests run headless.
+`EditorLogicTest` has 45 JUnit tests. They cover everything except the JavaFX window code, and they run without opening a window.
 
-| Area | Tests cover |
+| Area | What is checked |
 |---|---|
-| Geometry | angle in all directions, trimmed segment endpoints, node-centring, `lerp`, `clampMagnitude` |
-| `LinkedStack` | LIFO order, empty-stack behaviour |
-| `GraphModel` | hit tests, nearest / conflicting node queries, `nearestNodeWithin` excluding the source |
-| Commands | apply/undo round trip for every command, bidirectional upgrade, multi-node move |
-| JSON | round trip (normal and empty graph), id allocation after load, `loadFrom` replacing state, real file save/load via `@TempDir`, bidirectional preserved / defaulted / rejected when not boolean, whitespace tolerance, negative and exponent numbers, invalid documents |
-| Pull animation | eases toward cursor, springs back after release, does not mutate the model, reset, deleted node |
+| Geometry | Angles in all directions, shortened arrow ends, `lerp`, `clampMagnitude` |
+| `LinkedStack` | Last-in-first-out order, behaviour when empty |
+| `GraphModel` | Hit tests, nearest-node searches, skipping the source node |
+| Commands | Apply then undo gives back the original graph, for every command; two-way upgrade; moving several nodes |
+| JSON | Save then load gives the same graph (including an empty one); ids after loading; real file save and load in a temporary folder; two-way flag kept, defaulted or rejected; whitespace; negative and exponent numbers; many kinds of bad input |
+| Pull animation | Leans toward the mouse, eases back, never changes the model, reset, deleted node |
 
-Run with `./mvnw test`. What is **not** covered by automated tests: the JavaFX gesture handling and drawing in `EditorApplication`, which need manual checking (see the [demo video](media/demo_video_1.mp4)).
+Run them with `./mvnw test`.
 
----
-
-## 13. Constants reference
-
-| Constant | Value | Where | Meaning |
-|---|---|---|---|
-| `CANVAS_WIDTH` / `CANVAS_HEIGHT` | 800 / 600 | `EditorApplication` | Initial canvas size (the canvas then follows the window) |
-| `NODE_RADIUS` | 20 px | `EditorApplication` | Node size |
-| `DRAG_THRESHOLD` | 5 px | `EditorApplication` | Click vs drag cut-off |
-| `ARROW_HIT_TOLERANCE` | 6 px | `EditorApplication` | Arrow click distance |
-| `GEOMETRY_EPSILON` | 1e-6 | `EditorApplication` | Float comparison tolerance |
-| `ARROWHEAD_LENGTH` / `_ANGLE_DEGREES` | 12 px / 25° | `EditorApplication` | Arrowhead shape |
-| `PULL_RADIUS` | 90 px | `NodePullAnimation` | Distance at which a node is pulled; also the drop-to-connect tolerance |
-| `MAX_PULL_OFFSET` | 14 px | `NodePullAnimation` | Furthest a node is displaced |
-| `EASING_FACTOR` | 0.35 | `NodePullAnimation` | Share of the gap covered each frame |
-| `REST_THRESHOLD` | 0.05 px | `NodePullAnimation` | Below this an offset counts as at rest |
+**Not covered by automated tests:** the mouse handling and drawing inside `EditorApplication`. We checked those by hand (see the [demo video](media/demo_video_1.mp4)).
 
 ---
 
-## 14. Design decisions
+## 13. Why we built it this way
 
-| Decision | Reason |
+| Choice | Reason |
 |---|---|
-| **Command pattern** | Uniform undo/redo; new edit types need no change to the history code |
-| **Custom `LinkedStack`** | Course requirement to build our own data structure; O(1) operations |
-| **Immutable records for nodes and arrows** | Commands can safely keep old copies; no hidden shared state |
-| **Arrows reference node ids** | Moving a node (replacing the object) never breaks arrows |
-| **`LinkedHashMap` storage** | O(1) lookup by id and stable draw / save order |
-| **Logic kept out of JavaFX classes** | Everything except `EditorApplication` is unit-testable without a UI |
-| **Animation offsets separate from the model** | Cosmetic motion can never corrupt data or change what a click hits |
-| **Shared geometry for drawing and hit testing** | What you see is exactly what you can click |
-| **Hand-written JSON** | No dependency beyond JavaFX; the schema is small and fixed |
-| **Validate-then-replace on load** | A bad file cannot half-overwrite the current graph |
-| **Squared-distance comparisons** | Avoids `sqrt` in hit-test loops |
-| **Separate `Main` launcher** | Avoids the JavaFX classpath launch error |
+| **Command pattern** | Undo and redo work the same way for every edit. A new kind of edit needs no change to the history code. |
+| **Our own `LinkedStack`** | Course requirement. Also gives O(1) push and pop. |
+| **Records for nodes and arrows** | They never change, so commands can safely keep old copies. |
+| **Arrows store node ids** | Replacing a node with a moved copy does not break its arrows. |
+| **`LinkedHashMap`** | Fast lookup by id, and a steady order for drawing and saving. |
+| **JavaFX kept out of everything except `EditorApplication`** | The rest can be tested without a window. |
+| **Animation offsets kept out of the model** | A visual effect can never damage the data or change what a click hits. |
+| **One geometry class for drawing and hit tests** | The clickable area always matches what is on screen. |
+| **Hand-written JSON** | No extra library; the format is small and fixed. |
+| **Check the whole file before loading** | A bad file cannot half-replace the current graph. |
+| **Squared distances** | Avoids square roots in loops that run on every mouse move. |
+| **Separate `Main` class** | Avoids the JavaFX "runtime components are missing" error. |
 
 ---
 
-## 15. Known limitations
+## 14. Known limitations
 
-Worth knowing before a demo or a change:
+Good to know before a demo or a change:
 
-- **Multi-selection is not cleared** by undo, redo or load, so stale ids may remain until toggled or `Esc` is pressed. Draws and moves ignore ids that no longer exist.
-- **Dropping a moved node within 90 px of another node connects instead of moving**, because the drop is treated as a connect target. Drop farther away to move.
-- **Arrows are one per direction.** A second arrow in an existing direction is silently ignored.
-- **Hit testing and drawing are O(n)** over nodes and arrows. This is fine for hand-drawn graphs, not for thousands of items.
-- **No zoom or pan.** The canvas grows with the window, but there is no zoom or scrolling; shrinking the window hides nodes beyond its edge rather than moving them. PNG/SVG export uses the current canvas size. New nodes must sit at least one radius from the edge, but moves are not clamped, so a node can be dragged partly or fully off-canvas.
-- **JSON parser** does not support comments (not needed by the schema).
-- **No weights or colours** on nodes and arrows; the data model holds ids, positions, direction and a node label.
-- **Labels are not clipped or wrapped.** A long label can overflow its 20 px circle.
-- **Deleting a node by click waits 0.3 s**, so a double-click (label) is not preempted by the delete the first click would trigger.
-- **UI-layer code** (`EditorApplication`) has no automated tests.
+- **Purple multi-selection is not cleared** by undo, redo or load, so it may hold ids of nodes that no longer exist. Drawing and moving skip them. `Esc` clears it.
+- **Dropping a moved node within 90 px of another node connects them instead of moving.** Drop it further away to move it.
+- **One arrow per direction.** Dragging a second arrow the same way is ignored.
+- **Drawing and hit tests check every node and arrow**, so the time grows with the size of the graph. Fine for hand-drawn graphs, not for thousands of items.
+- **No zoom or pan.** The canvas grows with the window, but there is no zoom or scrolling. Making the window smaller hides nodes past its edge instead of moving them. PNG and SVG export use the current canvas size. New nodes must be at least one radius from the edge, but dragging does not stop a node leaving the canvas.
+- **No weights or colours** on nodes or arrows. A node has an id, a position and a label. An arrow has an id, two node ids and a direction setting.
+- **Long labels** are not clipped or wrapped and can spill outside the 20 px circle.
+- **Deleting a node by click waits 0.3 seconds** (see section 6.2).
+- **The JSON parser** does not accept comments. The format does not need them.
+- **No automated tests for `EditorApplication`.** See section 12.
